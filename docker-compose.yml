@@ -1,0 +1,9 @@
+services:
+  ubuntu:
+    image: ubuntu:24.04
+    ports:
+      - "2222:22"
+    container_name: ubuntu
+    volumes:
+      - /This_NAS/Teams/docker/ubuntu:/root
+    command: ["/bin/bash", "/root/init.sh"]
