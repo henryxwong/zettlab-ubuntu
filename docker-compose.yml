@@ -7,3 +7,7 @@ services:
     volumes:
       - /This_NAS/Teams/docker/ubuntu:/root
     command: ["/bin/bash", "/root/init.sh"]
+    devices:
+      - /dev/dri:/dev/dri
+    privileged: true
+    restart: unless-stopped

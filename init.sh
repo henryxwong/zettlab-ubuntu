@@ -59,6 +59,26 @@ if [ -f "/root/crontab.txt" ]; then
     crontab /root/crontab.txt  # Import crontab every boot
 fi
 
+# Install minimal Intel GPU drivers and runtimes if missing (for iGPU compute support in Python/PyTorch)
+if ! dpkg -l | grep -q intel-level-zero-gpu; then
+    apt-get update && apt-get install -y wget gpg-agent gnupg && rm -rf /var/lib/apt/lists/*
+
+    # Add Intel Graphics GPG key
+    wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+    gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+
+    # Add Intel GPU repository for Ubuntu 24.04 (noble)
+    echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble client" | \
+    tee /etc/apt/sources.list.d/intel-gpu-noble.list
+
+    # Update and install minimal compute packages
+    apt-get update && apt-get install -y \
+        libze1 \
+        intel-level-zero-gpu \
+        intel-opencl-icd \
+        && rm -rf /var/lib/apt/lists/*
+fi
+
 # Set up SSH
 mkdir -p /var/run/sshd
 mkdir -p /root/.ssh
