@@ -1,9 +1,18 @@
 # Zettlab NAS Docker Container Setup
 
+> **⚠️ Intel-Based NAS Only**: This Docker container setup is designed exclusively for **Zettlab D6 Ultra** and **D8 Ultra** NAS models. These systems feature Intel processors with integrated Arc graphics (iGPU). This setup will **NOT** work on ARM-based NAS systems or other models without Intel iGPU support.
+
 This repository provides a simple Docker Compose setup for running an Ubuntu 24.04 container on a Zettlab NAS with tools like Python, UV (Python package manager), Git, PM2 (Node.js process manager), SSH access, cron, and Neovim. It's designed for easy customization and persistence, ideal for development or scripting environments.
 
 ## Why No Dockerfile?
 We avoid using a custom Dockerfile to keep things simple and flexible. Building and exporting a Docker image as a .tar file for NAS upload can be time-consuming. Instead, we use the official `ubuntu:24.04` image and an `init.sh` script that runs on startup to install and configure everything conditionally. This allows anyone to easily modify the script for their needs without rebuilding an image—perfect for quick tweaks on a NAS.
+
+## Supported Hardware
+
+- **Zettlab D6 Ultra**
+- **Zettlab D8 Ultra**
+
+> **Note**: This setup leverages Intel-specific GPU drivers (`intel-level-zero-gpu`, `intel-opencl-icd`, `libze1`) and `/dev/dri` device passthrough, which are only available on Intel-based systems.
 
 ## Setup Instructions
 
@@ -17,7 +26,7 @@ We avoid using a custom Dockerfile to keep things simple and flexible. Building 
     - Optionally, add `crontab.txt` in `/This_NAS/Teams/docker/ubuntu` for custom cron jobs (e.g., `* * * * * echo "Test" >> /tmp/test.log`).
 
 3. **Start the Container**:
-    - Use the NAS Docker UI to create and start the container wth the compose file.
+    - Use the NAS Docker UI to create and start the container with the compose file.
     - The container will start with SSH enabled, but password login is disabled for security reasons. This means you cannot SSH in initially using a password—you must set up SSH key authentication using the Docker app terminal on your NAS UI.
 
 4. **Set Up SSH Key Authentication**:
@@ -41,15 +50,32 @@ We avoid using a custom Dockerfile to keep things simple and flexible. Building 
 
 ## iGPU Support
 
-The `init.sh` script includes installation of minimal Intel GPU drivers and runtimes (e.g., `intel-level-zero-gpu`, `intel-opencl-icd`, and `libze1`) to enable iGPU compute support for the Zettlab NAS D6 Ultra's Intel Core Ultra 5 125H processor (with integrated Arc graphics). This supports compute tasks in Python environments, such as PyTorch via Intel Extension for PyTorch (using oneAPI/SYCL backends).
+This setup includes comprehensive Intel integrated GPU (iGPU) support for compute-intensive workloads. The `init.sh` script automatically installs minimal Intel GPU drivers and runtimes:
 
-The `docker-compose.yml` file passes through `/dev/dri` for GPU device access and sets `privileged: true` to allow the container to interact with the host's iGPU.
+- **intel-level-zero-gpu**: Level Zero API for Intel GPU compute
+- **intel-opencl-icd**: OpenCL ICD for Intel GPUs
+- **libze1**: Level Zero library
 
-Python basics (`python3` and `python3-pip`) are installed, enabling further package installations (e.g., for PyTorch). Note that application-specific packages like PyTorch must be installed separately (e.g., via UV or pip).
+These drivers enable GPU-accelerated computing in Python environments, including support for:
+- PyTorch via Intel Extension for PyTorch (IPEX) with XPU backend
+- oneAPI/SYCL programming model
+- OpenCL applications
+
+The `docker-compose.yml` configuration:
+- Passes through `/dev/dri` for direct GPU device access
+- Sets `privileged: true` to allow container interaction with the host's iGPU
+
+### GPU-Accelerated Workloads
+
+This setup supports various GPU-accelerated applications:
+- Machine learning and AI workloads with PyTorch
+- Scientific computing (NumPy, SciPy with GPU acceleration)
+- Computer vision tasks
+- Data processing pipelines
 
 ## Testing iGPU Support
 
-To verify iGPU support, use the provided `test_igpu_support.py` script (located in the `igpu-test` folder). This script checks for PyTorch XPU (iGPU) availability and performs a simple computation test.
+To verify that iGPU support is working correctly, use the provided `test_igpu_support.py` script (located in the `igpu-test` folder). This script checks for PyTorch XPU (iGPU) availability and performs a simple computation test.
 
 1. **Place the Test Script**:
     - On your NAS host, add the `igpu-test` folder containing `test_igpu_support.py` to `/This_NAS/Teams/docker/ubuntu` (it will be available at `/root/igpu-test` inside the container due to the volume mount).
@@ -84,8 +110,30 @@ The `init.sh` script runs on every container start (via the `command` in docker-
 - **PM2 Handling**: Restores saved processes with `pm2 resurrect` on start.
 - **Cron Setup**: Installs cron if needed, starts the daemon (`/usr/sbin/cron`), and imports jobs from `/root/crontab.txt` if it exists.
 - **SSH Configuration**: Creates `/var/run/sshd` and `/root/.ssh` if needed, touches `/root/.ssh/authorized_keys` if missing, sets ownership (root:root) and permissions (700 for `.ssh`, 600 for `authorized_keys`), edits `/etc/ssh/sshd_config` (PermitRootLogin yes, PasswordAuthentication no, StrictModes no), modifies `/etc/pam.d/sshd` for compatibility, and starts sshd in background.
-- **iGPU Drivers**: Adds Intel GPU repository and installs minimal compute packages if missing.
+- **iGPU Drivers**: Adds Intel GPU repository and installs minimal compute packages if missing. This section only executes on compatible Intel-based systems.
 - **Shutdown Cleanup**: Traps SIGTERM (from `docker stop`) to save PM2 state (`pm2 save --force`), export current crontab to `/root/crontab.txt` (backing up any existing file), then gracefully stops sshd.
 - **Efficiency**: Heavy operations (e.g., apt updates) only run when needed; quick checks make restarts fast.
 
 This logic ensures the container is ready for use with minimal overhead, while persisting customizations via the volume mount. Customize `init.sh` as needed—add more tools or logic easily.
+
+## Troubleshooting
+
+### iGPU Not Detected
+- Verify you're using a compatible Zettlab NAS (D6 Ultra or D8 Ultra)
+- Check that `/dev/dri` is properly mounted in the container: `ls -la /dev/dri`
+- Run `clinfo` to check OpenCL device availability
+- Ensure the container is running with `privileged: true`
+
+### SSH Connection Issues
+- Confirm your public key is in `/root/.ssh/authorized_keys`
+- Check that the container's port 2222 is accessible from your network
+- Verify SSHd is running: `ps aux | grep sshd`
+
+### PM2 Processes Not Starting
+- Check that PM2 dump file exists in `/root/.pm2/dump.pm2`
+- Review PM2 logs: `pm2 logs`
+- Ensure required dependencies are installed in the container
+
+## License
+
+This project is provided as-is for use with Zettlab NAS systems.
