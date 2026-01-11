@@ -11,3 +11,5 @@ services:
       - /dev/dri:/dev/dri
     privileged: true
     restart: unless-stopped
+    environment:
+      - TZ=Asia/Hong_Kong
