@@ -17,23 +17,65 @@ cleanup() {
 # Trap SIGTERM signal to trigger the cleanup function
 trap 'cleanup' TERM
 
-# Install base packages if any are missing
-# Checks for git, curl, npm, and sshd; installs Python, pip, and others as needed
-if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! command -v npm >/dev/null || ! command -v sshd >/dev/null; then
-    apt-get update && apt-get install -y \
-        python3 \
-        python3-pip \
-        git \
-        openssh-server \
-        curl \
-        nodejs \
-        npm \
-        && rm -rf /var/lib/apt/lists/*
+# Flag to track if cleanup is needed
+need_cleanup=0
+
+# Declare an array for packages to install
+declare -a packages=()
+
+# Handle Intel GPU drivers setup if missing (requires special repo handling)
+if ! dpkg -l | grep -q intel-level-zero-gpu; then
+    # Ensure tools for adding repo are available
+    if ! command -v wget >/dev/null || ! command -v gpg >/dev/null; then
+        apt-get update && apt-get install -y wget gpg-agent gnupg
+        need_cleanup=1
+    fi
+
+    # Add Intel Graphics GPG key if missing
+    if [ ! -f "/usr/share/keyrings/intel-graphics.gpg" ]; then
+        wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+        gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+    fi
+
+    # Add Intel GPU repository for Ubuntu 24.04 (noble) if missing
+    if [ ! -f "/etc/apt/sources.list.d/intel-gpu-noble.list" ]; then
+        echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble client" | \
+        tee /etc/apt/sources.list.d/intel-gpu-noble.list
+    fi
+
+    # Add GPU packages to the install list
+    packages+=(libze1 intel-level-zero-gpu intel-opencl-icd)
 fi
 
-# Install Neovim if missing
+# Check for missing base packages and add to install list
+if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! command -v npm >/dev/null || ! command -v sshd >/dev/null; then
+    packages+=(python3 python3-pip git openssh-server curl nodejs npm)
+fi
+
+# Check for Neovim and add to install list
 if ! command -v nvim >/dev/null; then
-    apt-get update && apt-get install -y neovim && rm -rf /var/lib/apt/lists/*
+    packages+=(neovim)
+fi
+
+# Check for cron and add to install list
+if ! command -v crontab >/dev/null; then
+    packages+=(cron)
+fi
+
+# Check for rsync and add to install list
+if ! command -v rsync >/dev/null; then
+    packages+=(rsync)
+fi
+
+# Perform a single apt update and install if any packages are needed
+if [ ${#packages[@]} -gt 0 ]; then
+    apt-get update && apt-get install -y "${packages[@]}"
+    need_cleanup=1
+fi
+
+# Perform cleanup if any apt operations were run
+if [ $need_cleanup -eq 1 ]; then
+    rm -rf /var/lib/apt/lists/*
 fi
 
 # Install UV if missing
@@ -53,38 +95,12 @@ fi
 # Restore PM2 processes if saved
 pm2 resurrect
 
-# Install cron if missing, start the daemon, and import crontab.txt if it exists
-if ! command -v crontab >/dev/null; then
-    apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
-fi
+# Start cron daemon
 /usr/sbin/cron
+
+# Import crontab.txt if it exists
 if [ -f "/root/crontab.txt" ]; then
     crontab /root/crontab.txt  # Import crontab every boot
-fi
-
-# Install minimal Intel GPU drivers and runtimes if missing (for iGPU compute support in Python/PyTorch)
-# Checks for intel-level-zero-gpu package; adds repo and installs if needed
-if ! dpkg -l | grep -q intel-level-zero-gpu; then
-    apt-get update && apt-get install -y wget gpg-agent gnupg && rm -rf /var/lib/apt/lists/*
-
-    # Add Intel Graphics GPG key if missing
-    if [ ! -f "/usr/share/keyrings/intel-graphics.gpg" ]; then
-        wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
-        gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-    fi
-
-    # Add Intel GPU repository for Ubuntu 24.04 (noble) if missing
-    if [ ! -f "/etc/apt/sources.list.d/intel-gpu-noble.list" ]; then
-        echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble client" | \
-        tee /etc/apt/sources.list.d/intel-gpu-noble.list
-    fi
-
-    # Update and install minimal compute packages
-    apt-get update && apt-get install -y \
-        libze1 \
-        intel-level-zero-gpu \
-        intel-opencl-icd \
-        && rm -rf /var/lib/apt/lists/*
 fi
 
 # Set up SSH directories and permissions
