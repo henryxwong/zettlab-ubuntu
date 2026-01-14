@@ -95,6 +95,12 @@ fi
 # Restore PM2 processes if saved
 pm2 resurrect
 
+# Install pm2-logrotate if not already running
+if ! pm2 ls | grep -q pm2-logrotate; then
+    pm2 install pm2-logrotate
+    pm2 save --force
+fi
+
 # Start cron daemon
 /usr/sbin/cron
 
