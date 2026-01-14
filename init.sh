@@ -67,6 +67,11 @@ if ! command -v rsync >/dev/null; then
     packages+=(rsync)
 fi
 
+# Check for logrotate and add to install list
+if ! command -v logrotate >/dev/null; then
+    packages+=(logrotate)
+fi
+
 # Perform a single apt update and install if any packages are needed
 if [ ${#packages[@]} -gt 0 ]; then
     apt-get update && apt-get install -y "${packages[@]}"
@@ -107,6 +112,27 @@ fi
 # Import crontab.txt if it exists
 if [ -f "/root/crontab.txt" ]; then
     crontab /root/crontab.txt  # Import crontab every boot
+fi
+
+# Set up log directory for cron jobs
+mkdir -p /root/logs
+
+# Set up default logrotate config for cron job logs if missing
+if [ ! -f "/etc/logrotate.d/cronlogs" ]; then
+    cat <<EOF > /etc/logrotate.d/cronlogs
+/root/logs/*.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    create 0640 root root
+    sharedscripts
+    postrotate
+        # Optional: add commands if needed
+    endscript
+}
+EOF
 fi
 
 # Set up SSH directories and permissions
