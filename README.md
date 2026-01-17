@@ -2,7 +2,7 @@
 
 > **⚠️ Intel-Based NAS Only**: This Docker container setup is designed exclusively for **Zettlab D6 Ultra** and **D8 Ultra** NAS models. These systems feature Intel processors with integrated Arc graphics (iGPU). This setup will **NOT** work on ARM-based NAS systems or other models without Intel iGPU support.
 
-This repository provides a simple Docker Compose setup for running an Ubuntu 24.04 container on a Zettlab NAS with tools like Python, UV (Python package manager), Git, PM2 (Node.js process manager), SSH access, cron, and Neovim. It's designed for easy customization and persistence, ideal for development or scripting environments.
+This repository provides a simple Docker Compose setup for running an Ubuntu 24.04 container on a Zettlab NAS with tools like Python, UV (Python package manager), Git, PM2 (Node.js process manager), SSH access, cron, Neovim, rsync, and logrotate. It's designed for easy customization and persistence, ideal for development or scripting environments.
 
 ## Why No Dockerfile?
 We avoid using a custom Dockerfile to keep things simple and flexible. Building and exporting a Docker image as a .tar file for NAS upload can be time-consuming. Instead, we use the official `ubuntu:24.04` image and an `init.sh` script that runs on startup to install and configure everything conditionally. This allows anyone to easily modify the script for their needs without rebuilding an image—perfect for quick tweaks on a NAS.
@@ -23,7 +23,13 @@ We avoid using a custom Dockerfile to keep things simple and flexible. Building 
 2. **Add init.sh Script**:
     - Place `init.sh` in `/This_NAS/Teams/docker/ubuntu`.
     - Use the script provided (with conditional installs, cleanup, etc.).
-    - Optionally, add `crontab.txt` in `/This_NAS/Teams/docker/ubuntu` for custom cron jobs (e.g., `* * * * * echo "Test" >> /tmp/test.log`).
+    - Optionally, add `crontab.txt` in `/This_NAS/Teams/docker/ubuntu` for custom cron jobs.
+    - **Best Practice**: Always redirect cron job output to log files in `/root/logs` with stderr redirection:
+      ```bash
+      # Example cron entry
+      * * * * * /path/to/command >> /root/logs/mylog.log 2>&1
+      ```
+      The `2>&1` redirects both stdout and stderr to the log file.
 
 3. **Start the Container**:
     - Use the NAS Docker UI to create and start the container with the compose file.
@@ -72,6 +78,32 @@ This setup supports various GPU-accelerated applications:
 - Scientific computing (NumPy, SciPy with GPU acceleration)
 - Computer vision tasks
 - Data processing pipelines
+
+## Logging Management
+
+This setup includes comprehensive logging management with automatic log rotation:
+
+### Log Directory
+- **Location**: `/root/logs` - All cron job logs are stored here by default
+
+### Logrotate Configuration
+- **Configuration File**: `/etc/logrotate.d/cronlogs`
+- **Rotation Policy**:
+  - Daily rotation
+  - Keep last 7 days of logs
+  - Compress old logs automatically
+  - Create new log files with proper permissions (0640)
+  
+This ensures that cron job logs don't grow indefinitely and are automatically managed.
+
+### PM2 Log Rotation
+- **Feature**: Automatically installed via `pm2-logrotate` module
+- **Purpose**: Rotates PM2 process logs to prevent excessive disk usage
+- **Persistence**: Log rotation configuration is saved with PM2 state
+
+### Additional Tools
+- **rsync**: File synchronization and backup utility, useful for copying files between directories or systems efficiently
+- **logrotate**: System tool for managing automatic rotation, compression, and removal of log files
 
 ## Testing iGPU Support
 
