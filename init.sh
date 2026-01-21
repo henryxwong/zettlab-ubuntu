@@ -48,8 +48,8 @@ if ! dpkg -l | grep -q intel-level-zero-gpu; then
 fi
 
 # Check for missing base packages and add to install list
-if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! command -v npm >/dev/null || ! command -v sshd >/dev/null; then
-    packages+=(python3 python3-pip git openssh-server curl nodejs npm)
+if ! command -v git >/dev/null || ! command -v curl >/dev/null || ! command -v sshd >/dev/null; then
+    packages+=(python3 python3-pip git openssh-server curl)
 fi
 
 # Check for Neovim and add to install list
@@ -91,6 +91,36 @@ if [ ! -x "/root/.local/bin/uv" ]; then
         echo 'source /root/.local/bin/env' >> /root/.bashrc
     fi
 fi
+
+# Install NVM if missing
+if [ ! -d "/root/.nvm" ]; then
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+fi
+
+# Ensure NVM sourcing is in .bashrc
+if ! grep -q 'export NVM_DIR="$HOME/.nvm"' /root/.bashrc; then
+    echo 'export NVM_DIR="$HOME/.nvm"' >> /root/.bashrc
+    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> /root/.bashrc
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> /root/.bashrc
+fi
+
+# Ensure .bashrc is sourced in login shells via .bash_profile
+if ! grep -q '[ -f ~/.bashrc ] && \. ~/.bashrc' /root/.bash_profile 2>/dev/null; then
+    echo '[ -f ~/.bashrc ] && \. ~/.bashrc' >> /root/.bash_profile
+fi
+
+# Source NVM for the current script session
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# Install latest LTS Node.js if no versions are installed
+if [ -z "$(nvm ls | grep -o 'v[0-9]\+')" ]; then
+    nvm install --lts
+fi
+
+# Use the latest LTS Node.js version
+nvm use --lts
 
 # Install PM2 if missing
 if ! command -v pm2 >/dev/null; then
