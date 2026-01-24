@@ -72,6 +72,16 @@ if ! command -v logrotate >/dev/null; then
     packages+=(logrotate)
 fi
 
+# Check for ffmpeg and add to install list
+if ! command -v ffmpeg >/dev/null; then
+    packages+=(ffmpeg)
+fi
+
+# Check for sox and libsox-fmt-all and add to install list
+if ! command -v sox >/dev/null || ! dpkg -l | grep -q libsox-fmt-all; then
+    packages+=(sox libsox-fmt-all)
+fi
+
 # Perform a single apt update and install if any packages are needed
 if [ ${#packages[@]} -gt 0 ]; then
     apt-get update && apt-get install -y "${packages[@]}"
