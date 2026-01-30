@@ -82,6 +82,11 @@ if ! command -v sox >/dev/null || ! dpkg -l | grep -q libsox-fmt-all; then
     packages+=(sox libsox-fmt-all)
 fi
 
+# Check for tzdata and add to install list (for timezone setup)
+if ! dpkg -l | grep -q tzdata; then
+    packages+=(tzdata)
+fi
+
 # Perform a single apt update and install if any packages are needed
 if [ ${#packages[@]} -gt 0 ]; then
     apt-get update && apt-get install -y "${packages[@]}"
@@ -92,6 +97,11 @@ fi
 if [ $need_cleanup -eq 1 ]; then
     rm -rf /var/lib/apt/lists/*
 fi
+
+# Set system timezone using TZ env var (fixes UTC default)
+ln -sf /usr/share/zoneinfo/$TZ /etc/localtime
+echo "$TZ" > /etc/timezone
+dpkg-reconfigure -f noninteractive tzdata
 
 # Install UV if missing
 # Checks for the executable directly to ensure idempotency without relying on PATH
