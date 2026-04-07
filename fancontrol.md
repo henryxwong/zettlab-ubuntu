@@ -1,91 +1,13 @@
-**Disclaimer:** This guide is still a draft and incomplete.
+# NAS Fan Control Guide
 
-**Guide: Installing Ubuntu 26.04 on the Zettlab D6 Ultra or D8 Ultra NAS**
+## Scope
 
-### Prerequisites
-- HDMI display and USB keyboard
-- USB flash drive ≥ 32 GB
-- Ubuntu 26.04 ISO (nightly/daily image)
-- **External USB drive or SSD with enough free space** (at least as large as your internal M.2 system drive) for the ZettOS backup
-- Internet connection after install
+This document captures what was implemented on this NAS to expose fan telemetry, monitor it with Netdata, and control the CPU fan with a custom temperature-based service on Ubuntu.
 
-### Step 1: Create the Bootable Ubuntu 26.04 USB
-1. Download the Ubuntu 26.04 ISO.
-2. Write it to the USB using Rufus, Ventoy, or `dd`.
+The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
 
-### Step 2: Enter BIOS and Configure Settings
-1. Power off the NAS.
-2. Connect HDMI display and USB keyboard.
-3. Power on and tap **F2** repeatedly to enter BIOS.
-4. **Disable Secure Boot** (Security tab → Disabled).
-5. **Enable “HDD power on sequence”** (or “HDD power up”) under Advanced → Storage/Power.
-6. Save & exit (F10).
+## What Is Implemented
 
-Power off the NAS.
-
-### Step 3: Boot the Ubuntu 26.04 Live Environment with Front-Display Fix
-1. Insert the USB and power on the NAS.
-2. Tap **F12** for the boot menu and select the USB.
-3. At the GRUB menu, highlight **“Try Ubuntu”**.
-4. Press **E** to edit.
-5. At the end of the `linux` line, add:
-   ```
-   video=eDP-1:d
-   ```  
-6. Press **Ctrl+X** or **F10** to boot.
-
-You are now in the Ubuntu 26.04 live desktop.
-
-### Step 4: Backup ZettOS (Internal System Storage) – Do This BEFORE Installing
-**Important:** This step creates a full image backup of the internal M.2 drive that contains ZettOS. Perform it now while the original system is still intact.
-
-1. Plug in your external USB backup drive.
-2. Open a **Terminal** (Ctrl+Alt+T).
-3. Identify the drives carefully:
-   ```
-   lsblk -f
-   ```  
-   - Look for your **internal M.2 NVMe drive** (usually `/dev/nvme0n1` – it will show multiple partitions and is **not** labeled as the USB installer).
-   - Confirm the external backup drive (usually `/dev/sdX` where X is a letter).
-   - **Double-check sizes and labels** – do not guess.
-
-4. Create the backup (replace `/dev/nvme0n1` with your confirmed internal drive and adjust the output path):
-   ```
-   sudo dd if=/dev/nvme0n1 of=/media/ubuntu/<your-external-drive-name>/zettos-backup.img bs=4M status=progress conv=fsync
-   ```  
-   This may take 10–30+ minutes depending on drive size.
-
-5. When finished, verify the backup file exists and has the correct size:
-   ```
-   ls -lh /media/ubuntu/<your-external-drive-name>/zettos-backup.img
-   ```  
-
-**Warning:**
-- Wrong device selection can permanently erase data. Triple-check with `lsblk` before running `dd`.
-- Do **not** proceed to installation until the backup completes successfully.
-
-### Step 5: Install Ubuntu 26.04
-1. Launch the **Install Ubuntu** icon on the desktop.
-2. The M.2 drive and HDD bays are now visible.
-3. Choose your partitioning and complete the installation.
-4. Reboot and remove the USB.
-
-The `video=eDP-1:d` parameter is automatically saved.
-
-### Step 6: Post-Installation (Ubuntu 26.04)
-1. Boot into the new system and run:
-   ```
-   sudo apt update && sudo apt upgrade -y
-   ```
-
-### Step 7: Fan Control (Highly Recommended – Especially if the Unit Runs Hot)
-After installing Ubuntu the fans (including the CPU fan) run at a fixed speed set by the BIOS.
-
-**Scope**  
-This section captures what was implemented on this NAS to expose fan telemetry, monitor it with Netdata, and control the CPU fan with a custom temperature-based service on Ubuntu.  
-The target hardware is a Zettlab D6/D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
-
-**What Is Implemented**
 1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
 2. `lm-sensors` is installed for local sensor visibility.
 3. Netdata is installed and claimed to Netdata Cloud for monitoring.
@@ -93,26 +15,32 @@ The target hardware is a Zettlab D6/D8 Ultra class NAS using the `zettlab_d8_fan
 5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature.
 6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver as shipped on Ubuntu.
 
-**Why A Custom Service Was Needed**  
-The Zettlab fan driver accepts PWM values in the range `0-183`.  
+## Why A Custom Service Was Needed
+
+The Zettlab fan driver accepts PWM values in the range `0-183`.
+
 Ubuntu's stock `fancontrol` tooling assumes a `0-255` style PWM range during probing and startup:
+
 - `pwmconfig` reported no usable PWM outputs.
 - `fancontrol` failed when it tried to write an invalid PWM max value for this driver.
 
 The custom service avoids that issue by writing only valid `0-183` values.
 
-**Fan Layout**
+## Fan Layout
+
 - `fan1`: rear disk fan 1
 - `fan2`: rear disk fan 2
 - `fan3`: CPU fan
 
 On this system:
+
 - disk fans are manual only through this driver
 - CPU auto mode via `pwm3_enable=2` was unstable in testing
 - CPU fan is therefore kept in manual mode and driven by the custom service
 - HDD fans are driven from SATA SMART temperatures by a separate service
 
-**Important Paths**
+## Important Paths
+
 - Kernel module source: `/usr/src/zettlab-d8-fans-0.0.1`
 - CPU fan controller script: `/usr/local/sbin/cpu-fan-curve.sh`
 - CPU fan controller service: `/etc/systemd/system/cpu-fan-curve.service`
@@ -123,64 +51,87 @@ On this system:
 - Zettlab hwmon node: `/sys/class/hwmon/hwmon8`
 - CPU package temp input: `/sys/class/hwmon/hwmon7/temp1_input`
 
-**Installed Packages**
+## Installed Packages
+
 - `dkms`
 - `build-essential`
 - `lm-sensors`
-- `smartmontools`
 - Netdata static install under `/opt/netdata`
 
 Removed:
+
 - `fancontrol`
 
-#### 7.1 Install the Kernel Module
+## Kernel Module Setup
+
+### Prerequisites
+
+- Secure Boot disabled
+- kernel headers present for the running kernel
+- `dkms` installed
+
+### DKMS Install Flow
+
+Source files were placed in:
+
 ```bash
-sudo apt install dkms build-essential git smartmontools lm-sensors -y
-git clone https://github.com/haveacry/zettlab-d8-fans.git
-cd zettlab-d8-fans
-
-sudo mkdir -p /usr/src/zettlab-d8-fans-0.0.1
-sudo cp -r * /usr/src/zettlab-d8-fans-0.0.1/
-
-sudo dkms add -m zettlab-d8-fans -v 0.0.1
-sudo dkms build -m zettlab-d8-fans -v 0.0.1
-sudo dkms install -m zettlab-d8-fans -v 0.0.1
-sudo modprobe zettlab_d8_fans
+/usr/src/zettlab-d8-fans-0.0.1
 ```
 
-Make it load at boot:
+Then installed with:
+
 ```bash
-echo zettlab_d8_fans | sudo tee /etc/modules-load.d/zettlab_d8_fans.conf
+dkms add -m zettlab-d8-fans -v 0.0.1
+dkms build -m zettlab-d8-fans -v 0.0.1
+dkms install -m zettlab-d8-fans -v 0.0.1
+modprobe zettlab_d8_fans
 ```
 
-Verify:
+Automatic module load at boot:
+
+```bash
+echo zettlab_d8_fans > /etc/modules-load.d/zettlab_d8_fans.conf
+```
+
+### Verifying The Module
+
 ```bash
 lsmod | grep zettlab_d8_fans
-cat /sys/class/hwmon/hwmon*/name   # should show zettlab_d8_fans
+cat /sys/class/hwmon/hwmon*/name
 sensors
 ```
 
-#### 7.2 Remove Incompatible Stock Tooling
-```bash
-sudo apt purge fancontrol -y
+Expected `hwmon` name:
+
+```text
+zettlab_d8_fans
 ```
 
-#### 7.3 (Optional) Install Netdata for Monitoring
-Native packages were not available for Ubuntu 26.04, so the static install was used:
-```bash
-bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
-```
+## Netdata Setup
+
+Netdata native packages were not available for Ubuntu 26.04 `resolute`, so the static install path was used.
+
+Installed using the Netdata kickstart script with:
+
+- `--stable-channel`
+- `--install-type static`
+- cloud claim parameters
+
 Netdata status can be checked with:
+
 ```bash
 systemctl status netdata
 curl -fsS http://127.0.0.1:19999/api/v1/info
 ```
+
 Netdata successfully discovered the Zettlab fan sensors and exposed the CPU fan RPM chart.
 
-#### 7.4 lm-sensors Notes
+## lm-sensors Notes
+
 `lm-sensors` works without extra configuration.
 
 The optional docs snippet below was not added because it only remaps PWM display values and is not required for monitoring:
+
 ```conf
 chip "zettlab_d8_fans-*"
     compute pwm1 (@ * 200 / 183), (@ * 183 / 200)
@@ -189,47 +140,63 @@ chip "zettlab_d8_fans-*"
 ```
 
 Useful command:
+
 ```bash
 sensors
 ```
 
-#### 7.5 Custom Temperature-Based Fan Control Services
+## Final CPU Fan Control Design
 
-**Final CPU Fan Control Design**  
-**Why CPU Auto Mode Was Not Used**  
+### Why CPU Auto Mode Was Not Used
+
 The driver's documented CPU auto mode:
+
 ```bash
 echo 2 > /sys/class/hwmon/hwmon8/pwm3_enable
 ```
+
 was unstable in testing. At multiple points the CPU fan dropped to `0 RPM`.
 
 Because of that, the implemented approach is:
+
 1. force CPU fan manual mode
 2. read CPU package temperature
 3. map temperature to safe PWM values
 4. keep a top-end hysteresis band to avoid bouncing near full speed
 
-**Active Curve**  
+### Active Curve
+
 Current logic:
-- `<48 C` → `100`
-- `48-55 C` → `120`
-- `56-63 C` → `140`
-- `64-71 C` → `160`
-- `>=72 C` → `183`
+
+- `<48 C` -> `100`
+- `48-55 C` -> `120`
+- `56-63 C` -> `140`
+- `64-71 C` -> `160`
+- `>=72 C` -> `183`
 
 Top-end hysteresis:
+
 - switch to `183` at `72 C` or above
 - stay at `183` until temperature drops below `68 C`
 
 Polling behavior:
+
 - loop interval: `2s`
 - standard downshift hysteresis: `2 C`
 - only valid `0-183` PWM values are written
 
 Fail-safe behavior:
+
 - if temp read fails, set `pwm3=120`
 
-**CPU fan script** (`sudo nano /usr/local/sbin/cpu-fan-curve.sh`):
+## Exact Script Code
+
+File:
+
+```bash
+/usr/local/sbin/cpu-fan-curve.sh
+```
+
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -355,11 +322,14 @@ main_loop() {
 main_loop
 ```
 
+## Exact systemd Unit Code
+
+File:
+
 ```bash
-sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
+/etc/systemd/system/cpu-fan-curve.service
 ```
 
-**CPU fan service** (`sudo nano /etc/systemd/system/cpu-fan-curve.service`):
 ```ini
 [Unit]
 Description=CPU fan control curve for Zettlab NAS
@@ -375,9 +345,12 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-**HDD Fan Control Design**  
-**Temperature Source**  
+## HDD Fan Control Design
+
+### Temperature Source
+
 The HDD fan controller reads SMART temperatures from the four SATA drives:
+
 - `/dev/sda`
 - `/dev/sdb`
 - `/dev/sdc`
@@ -385,30 +358,44 @@ The HDD fan controller reads SMART temperatures from the four SATA drives:
 
 It uses the highest drive temperature as the control input for both HDD fans.
 
-**Why SMART Was Used**  
-For HDD fans, CPU temperature is the wrong signal.  
-Disk fan control should follow disk temperature, not CPU package temperature.  
+### Why SMART Was Used
+
+For HDD fans, CPU temperature is the wrong signal.
+
+Disk fan control should follow disk temperature, not CPU package temperature.
+
 This NAS exposes reliable SMART temperatures through `smartctl`, so the HDD fan service uses those values directly.
 
-**HDD Fan Curve**  
+### HDD Fan Curve
+
 Current logic:
-- `<35 C` → `80`
-- `35-39 C` → `100`
-- `40-42 C` → `120`
-- `43-45 C` → `140`
-- `>=46 C` → `183`
+
+- `<35 C` -> `80`
+- `35-39 C` -> `100`
+- `40-42 C` -> `120`
+- `43-45 C` -> `140`
+- `>=46 C` -> `183`
 
 Top-end hysteresis:
+
 - switch to `183` at `46 C` or above
 - stay at `183` until temp drops below `44 C`
 
 Polling behavior:
+
 - loop interval: `20s`
 - standard downshift hysteresis: `1 C`
 
 The slower poll interval is intentional because SMART polling is heavier than direct `hwmon` reads.
 
-**HDD fan script** (`sudo nano /usr/local/sbin/hdd-fan-curve.sh`):
+### Exact HDD Script Code
+
+File:
+
+```bash
+/usr/local/sbin/hdd-fan-curve.sh
+```
+
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -549,11 +536,14 @@ main_loop() {
 main_loop
 ```
 
+### Exact HDD systemd Unit Code
+
+File:
+
 ```bash
-sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
+/etc/systemd/system/hdd-fan-curve.service
 ```
 
-**HDD fan service** (`sudo nano /etc/systemd/system/hdd-fan-curve.service`):
 ```ini
 [Unit]
 Description=HDD fan control curve for Zettlab NAS
@@ -569,20 +559,32 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Activate both services:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now cpu-fan-curve.service hdd-fan-curve.service
-```
+## Service Management
 
-#### 7.6 Service Management & Runtime Commands
 Reload and restart after editing:
+
 ```bash
 systemctl daemon-reload
-systemctl restart cpu-fan-curve.service hdd-fan-curve.service
+systemctl restart cpu-fan-curve.service
 ```
 
-Useful runtime commands:
+Enable at boot:
+
+```bash
+systemctl enable cpu-fan-curve.service
+```
+
+Check status:
+
+```bash
+systemctl status cpu-fan-curve.service
+cat /run/cpu-fan-curve.state
+```
+
+## Useful Runtime Commands
+
+### Read Current CPU Temp And Fan State
+
 ```bash
 cat /sys/class/hwmon/hwmon7/temp1_input
 cat /sys/class/hwmon/hwmon8/pwm3_enable
@@ -590,52 +592,69 @@ cat /sys/class/hwmon/hwmon8/pwm3
 cat /sys/class/hwmon/hwmon8/fan3_input
 ```
 
-**Force CPU Fan Manual Mode**
+### Force CPU Fan Manual Mode
+
 ```bash
 echo 1 > /sys/class/hwmon/hwmon8/pwm3_enable
 ```
 
-**Set CPU Fan PWM Manually**
+### Set CPU Fan PWM Manually
+
 ```bash
 echo 120 > /sys/class/hwmon/hwmon8/pwm3
 ```
 
-**Return To Custom Service Control**  
+### Return To Custom Service Control
+
 Just leave the service running. It will overwrite manual test values on its next loop iteration.
 
-**Testing Summary**  
-**Partial-Load Test**  
+## Testing Summary
+
+### Partial-Load Test
+
 An earlier 3-minute test with only `12` workers showed about `67%` total CPU usage because the system has `18` logical CPUs.
 
-**Near-100% Load Test**  
+### Near-100% Load Test
+
 A later 3-minute test used `18` workers and reached about `96-100%` CPU usage.
 
 Observed behavior:
+
 - initial temperature spike: up to `87 C`
 - steady-state after ramp-up: about `70-73 C`
 - CPU fan at steady-state full speed: about `4791-4845 RPM`
 - `Thermal throttle` column remained `false` for every sampled interval
 
-**Thermal Throttling Check**  
+## Thermal Throttling Check
+
 Thermal throttling was checked using kernel counters under:
+
 ```bash
 /sys/devices/system/cpu/cpu*/thermal_throttle/
 ```
-No new throttle events were recorded during the tested near-100% sampled run.  
+
+No new throttle events were recorded during the tested near-100% sampled run.
+
 That suggests the fan control was sufficient to keep the CPU from thermal throttling during the measured intervals.
 
-**Generated Test Reports**  
+## Generated Test Reports
+
 3-minute test tables were saved here:
+
 ```bash
 /tank/Downloads/cpu_fan_3min_test.md
 ```
+
 This report includes:
+
 - 3-minute partial-load test
 - 3-minute near-100% load test
 - 3-minute near-100% load test with `Thermal throttle` column
 
-**Recommended Sharing Notes**  
+## Recommended Sharing Notes
+
 If someone wants to reproduce this on a similar NAS:
+
 1. install the Zettlab fan module through DKMS
 2. verify fans appear in `hwmon`
 3. install `lm-sensors`
@@ -643,16 +662,3 @@ If someone wants to reproduce this on a similar NAS:
 5. do not rely on stock `fancontrol` with this driver
 6. use a custom script that only writes valid PWM values in `0-183`
 7. test both fan behavior and throttle counters under sustained CPU load
-
-### Known Hardware Support in Ubuntu 26.04
-- **Fans**: Fully supported via the community DKMS kernel module (`zettlab_d8_fans`).
-- **Front LCD / Display**: Connected as eDP-1; disabled with `video=eDP-1:d`. No software output implemented yet.
-- **RGB / LED strip**: Detected as USB device (`lsusb`) but no driver available.
-- **Networking (RTL8127 NICs)**: Works out-of-the-box.
-- **Storage (M.2 + HDD bays)**: Fully detected after BIOS change.
-- **HDMI output**: Works normally once front display is disabled.
-
-### CPU Power Limit (Important Hardware Limitation)
-The Zettlab D6/D8 Ultra uses an **Intel Core Ultra 5 125H** processor with **PL1/PL2 hard-locked to 40 W** in the BIOS. This limit remains even after installing Ubuntu 26.04.
-
-**This guide was made possible with detailed information and testing shared by Speedster and Daisan on the Zettlab Discord.**
