@@ -1,5 +1,3 @@
-# zettlab-ubuntu
-
 **Disclaimer:** This guide is still a draft and incomplete.
 
 **Guide: Installing Ubuntu 26.04 on the Zettlab D6 Ultra or D8 Ultra NAS**
@@ -80,7 +78,10 @@ The `video=eDP-1:d` parameter is automatically saved.
    sudo apt update && sudo apt upgrade -y
    ```
 
-### Step 7: Fan Control (Optional but Recommended)
+### Step 7: Fan Control (Highly Recommended – Especially if the Unit Runs Hot)
+The fans (including the **CPU fan**) will run at a fixed speed set by the BIOS.  
+If your Zettlab D6/D8 Ultra feels quite hot under load, installing this module is **strongly recommended**. It exposes proper control over **all three fans**, including the ability to set the CPU fan to automatic temperature-based mode.
+
 1. Install build tools:  
    ```
    sudo apt install dkms build-essential git -y
@@ -93,7 +94,10 @@ The `video=eDP-1:d` parameter is automatically saved.
 4. Add to auto-load:  
    ```
    echo zettlab_d8_fans | sudo tee /etc/modules-load.d/zettlab_d8_fans.conf
-   ```
+   ```  
+
+After installation, you can set the CPU fan to automatic mode with:  
+`echo 2 | sudo tee /sys/class/hwmon/hwmonX/pwm3_enable` (replace `hwmonX` with the correct hwmon node for the fans).
 
 ### Known Hardware Support in Ubuntu 26.04
 - **Fans**: Fully supported via the community DKMS kernel module (`zettlab_d8_fans`). Exposes fan speed (RPM) and PWM control through the standard hwmon interface.  
