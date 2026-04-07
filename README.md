@@ -103,4 +103,15 @@ The `video=eDP-1:d` parameter is automatically saved.
 - **Storage (M.2 + HDD bays)**: Fully detected after enabling “HDD power on sequence” in BIOS.  
 - **HDMI output**: Works normally once the front display is disabled.  
 
+### CPU Power Limit (Important Hardware Limitation)
+The Zettlab D6/D8 Ultra uses an **Intel Core Ultra 5 125H** processor.  
+In the BIOS/UEFI, Zettlab has **hard-locked the power limit (PL1/PL2) to 40 W**.  
+
+- The CPU is officially rated for up to **115 W** turbo boost.  
+- The 40 W cap is a deliberate design choice to keep the compact NAS chassis quiet and cool (laptop-style cooling with small fans).  
+- It has almost no impact on NPU-based AI tasks or typical NAS workloads, but it noticeably reduces peak CPU performance for heavy tasks (video encoding, compiling, etc.).  
+- This limit cannot be raised from inside Ubuntu. It stays in effect even after installing Ubuntu 26.04.  
+
+If you need better efficiency inside the 40 W envelope, you can tune Linux power management (powersave governor + TLP/auto-cpufreq) after installation.
+
 **This guide was made possible with detailed information and testing shared by Speedster on the Zettlab Discord.**
