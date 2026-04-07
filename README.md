@@ -78,21 +78,73 @@ The `video=eDP-1:d` parameter is automatically saved.
    sudo apt update && sudo apt upgrade -y
    ```
 
-### Step 7: Fan Control (Highly Recommended)
-The fans (including the **CPU fan**) will run at a fixed speed set by the BIOS after installing Ubuntu.  
-The stock `fancontrol` package is **not compatible** with the Zettlab driver (PWM range is 0–183, not 0–255) and the driver’s built-in CPU auto mode (`pwm3_enable=2`) is unstable (CPU fan repeatedly drops to 0 RPM in testing).
+### Step 7: Fan Control (Highly Recommended – Especially if the Unit Runs Hot)
+After installing Ubuntu the fans (including the CPU fan) run at a fixed speed set by the BIOS.
 
-A custom solution is therefore required. The following setup has been fully tested and proven stable under sustained near-100 % CPU load (no thermal throttling observed).
+**Scope**  
+This section captures what was implemented on this NAS to expose fan telemetry, monitor it with Netdata, and control the CPU fan with a custom temperature-based service on Ubuntu.  
+The target hardware is a Zettlab D6/D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
+
+**What Is Implemented**
+1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
+2. `lm-sensors` is installed for local sensor visibility.
+3. Netdata is installed and claimed to Netdata Cloud for monitoring.
+4. A custom `systemd` service controls the CPU fan in manual mode based on CPU package temperature.
+5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature.
+6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver as shipped on Ubuntu.
+
+**Why A Custom Service Was Needed**  
+The Zettlab fan driver accepts PWM values in the range `0-183`.  
+Ubuntu's stock `fancontrol` tooling assumes a `0-255` style PWM range during probing and startup:
+- `pwmconfig` reported no usable PWM outputs.
+- `fancontrol` failed when it tried to write an invalid PWM max value for this driver.
+
+The custom service avoids that issue by writing only valid `0-183` values.
+
+**Fan Layout**
+- `fan1`: rear disk fan 1
+- `fan2`: rear disk fan 2
+- `fan3`: CPU fan
+
+On this system:
+- disk fans are manual only through this driver
+- CPU auto mode via `pwm3_enable=2` was unstable in testing
+- CPU fan is therefore kept in manual mode and driven by the custom service
+- HDD fans are driven from SATA SMART temperatures by a separate service
+
+**Important Paths**
+- Kernel module source: `/usr/src/zettlab-d8-fans-0.0.1`
+- CPU fan controller script: `/usr/local/sbin/cpu-fan-curve.sh`
+- CPU fan controller service: `/etc/systemd/system/cpu-fan-curve.service`
+- HDD fan controller script: `/usr/local/sbin/hdd-fan-curve.sh`
+- HDD fan controller service: `/etc/systemd/system/hdd-fan-curve.service`
+- Runtime state file: `/run/cpu-fan-curve.state`
+- HDD runtime state file: `/run/hdd-fan-curve.state`
+- Zettlab hwmon node: `/sys/class/hwmon/hwmon8`
+- CPU package temp input: `/sys/class/hwmon/hwmon7/temp1_input`
+
+**Installed Packages**
+- `dkms`
+- `build-essential`
+- `lm-sensors`
+- `smartmontools`
+- Netdata static install under `/opt/netdata`
+
+Removed:
+- `fancontrol`
 
 #### 7.1 Install the Kernel Module
 ```bash
-sudo apt install dkms build-essential git -y
+sudo apt install dkms build-essential git smartmontools lm-sensors -y
 git clone https://github.com/haveacry/zettlab-d8-fans.git
 cd zettlab-d8-fans
-# Follow the repo's README to install via DKMS (typical commands):
-# sudo dkms add -m zettlab-d8-fans -v 0.0.1
-# sudo dkms build -m zettlab-d8-fans -v 0.0.1
-# sudo dkms install -m zettlab-d8-fans -v 0.0.1
+
+sudo mkdir -p /usr/src/zettlab-d8-fans-0.0.1
+sudo cp -r * /usr/src/zettlab-d8-fans-0.0.1/
+
+sudo dkms add -m zettlab-d8-fans -v 0.0.1
+sudo dkms build -m zettlab-d8-fans -v 0.0.1
+sudo dkms install -m zettlab-d8-fans -v 0.0.1
 sudo modprobe zettlab_d8_fans
 ```
 
@@ -113,26 +165,14 @@ sensors
 sudo apt purge fancontrol -y
 ```
 
-#### 7.3 Install lm-sensors (optional but useful for quick checks)
-```bash
-sudo apt install lm-sensors -y
-sensors
-```
-
-#### 7.4 (Optional) Install Netdata for Monitoring
-Because native packages were not available for Ubuntu 26.04 at the time of writing, use the static install:
+#### 7.3 (Optional) Install Netdata for Monitoring
+Native packages were not available for Ubuntu 26.04, so the static install was used:
 ```bash
 bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
 ```
-Claim it to Netdata Cloud if desired. It will automatically discover the Zettlab fan sensors.
+Netdata successfully discovered the Zettlab fan sensors and exposed the CPU fan RPM chart.
 
-#### 7.5 Custom Temperature-Based Fan Control Services
-Two custom `systemd` services are used:
-
-- **CPU fan** controlled from CPU package temperature (`hwmon7/temp1_input`).
-- **HDD fans** (both rear disk fans) controlled from the *highest* SATA SMART temperature.
-
-**Create the scripts and services exactly as shown below** (these are the exact files that passed all load testing).
+#### 7.4 Custom Temperature-Based Fan Control Services
 
 **CPU fan script** (`sudo nano /usr/local/sbin/cpu-fan-curve.sh`):
 ```bash
@@ -150,33 +190,121 @@ FULL_SPEED_ON_C=72
 FULL_SPEED_OFF_C=68
 
 read_temp_c() {
-  local temp_milli
-  temp_milli=$(<"$TEMP_INPUT") || return 1
-  printf '%d\n' "$((temp_milli / 1000))"
+local temp_milli
+temp_milli=$(<"$TEMP_INPUT") || return 1
+printf '%d\n' "$((temp_milli / 1000))"
 }
 
 target_pwm_for_temp() {
-  local temp_c=$1
-  if (( temp_c >= FULL_SPEED_ON_C )); then
-    printf '183\n'
-  elif (( temp_c >= 64 )); then
-    printf '160\n'
-  elif (( temp_c >= 56 )); then
-    printf '140\n'
-  elif (( temp_c >= 48 )); then
-    printf '120\n'
-  else
-    printf '100\n'
-  fi
+local temp_c=$1
+
+if (( temp_c >= FULL_SPEED_ON_C )); then
+printf '183\n'
+elif (( temp_c >= 64 )); then
+printf '160\n'
+elif (( temp_c >= 56 )); then
+printf '140\n'
+elif (( temp_c >= 48 )); then
+printf '120\n'
+else
+printf '100\n'
+fi
 }
 
-# ... (rest of the script is identical to the version in the NAS Fan Control Guide – read_state, write_state, apply_pwm, main_loop)
+read_state() {
+if [[ -r "$STATE_FILE" ]]; then
+# shellcheck disable=SC1090
+source "$STATE_FILE"
+else
+last_pwm=-1
+last_temp=-1000
+fi
+}
+
+write_state() {
+umask 022
+cat >"$STATE_FILE" <<EOF
+last_pwm=$1
+last_temp=$2
+EOF
+}
+
+apply_pwm() {
+local pwm=$1
+printf '1\n' >"$PWM_ENABLE"
+printf '%s\n' "$pwm" >"$PWM_OUTPUT"
+}
+
+main_loop() {
+local temp_c target_pwm
+
+read_state
+
+while true; do
+if ! temp_c=$(read_temp_c); then
+apply_pwm "$SAFE_PWM"
+write_state "$SAFE_PWM" -1000
+sleep "$SLEEP_SECS"
+continue
+fi
+
+target_pwm=$(target_pwm_for_temp "$temp_c")
+
+if (( last_pwm == -1 )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( temp_c >= FULL_SPEED_ON_C && last_pwm < 183 )); then
+apply_pwm 183
+last_pwm=183
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( last_pwm == 183 && temp_c >= FULL_SPEED_OFF_C )); then
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( target_pwm > last_pwm )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( target_pwm < last_pwm && temp_c <= last_temp - HYSTERESIS_C )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+done
+}
 
 main_loop
 ```
-*(Make executable: `sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh`)*
 
-**CPU fan systemd unit** (`sudo nano /etc/systemd/system/cpu-fan-curve.service`):
+```bash
+sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
+```
+
+**CPU fan service** (`sudo nano /etc/systemd/system/cpu-fan-curve.service`):
 ```ini
 [Unit]
 Description=CPU fan control curve for Zettlab NAS
@@ -192,27 +320,193 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-**HDD fan script** and **HDD fan service** are provided in the original NAS Fan Control Guide (identical logic, 20 s polling interval, SMART temperature source from `/dev/sda`–`/dev/sdd`, curve tuned for disks).
-
-After creating both scripts and both `.service` files:
+**HDD fan script** (`sudo nano /usr/local/sbin/hdd-fan-curve.sh`):
 ```bash
-sudo chmod +x /usr/local/sbin/*.sh
+#!/bin/bash
+set -euo pipefail
+
+DRIVES=(/dev/sda /dev/sdb /dev/sdc /dev/sdd)
+PWM_OUTPUTS=("/sys/class/hwmon/hwmon8/pwm1" "/sys/class/hwmon/hwmon8/pwm2")
+STATE_FILE="/run/hdd-fan-curve.state"
+SLEEP_SECS=20
+HYSTERESIS_C=1
+SAFE_PWM=120
+FULL_SPEED_ON_C=46
+FULL_SPEED_OFF_C=44
+
+read_drive_temp() {
+local drive=$1 temp
+temp=$(smartctl -A "$drive" 2>/dev/null | awk '/^194[[:space:]]+Temperature_Celsius/ {print $10; exit}')
+if [[ -z "${temp:-}" ]]; then
+temp=$(smartctl -A "$drive" 2>/dev/null | awk '/^190[[:space:]]+Airflow_Temperature_Cel/ {print $10; exit}')
+fi
+[[ -n "${temp:-}" ]] || return 1
+printf '%s\n' "$temp"
+}
+
+read_max_hdd_temp() {
+local drive temp max_temp=-1
+for drive in "${DRIVES[@]}"; do
+if temp=$(read_drive_temp "$drive"); then
+(( temp > max_temp )) && max_temp=$temp
+fi
+done
+(( max_temp >= 0 )) || return 1
+printf '%s\n' "$max_temp"
+}
+
+target_pwm_for_temp() {
+local temp_c=$1
+
+if (( temp_c >= FULL_SPEED_ON_C )); then
+printf '183\n'
+elif (( temp_c >= 43 )); then
+printf '140\n'
+elif (( temp_c >= 40 )); then
+printf '120\n'
+elif (( temp_c >= 35 )); then
+printf '100\n'
+else
+printf '80\n'
+fi
+}
+
+read_state() {
+if [[ -r "$STATE_FILE" ]]; then
+# shellcheck disable=SC1090
+source "$STATE_FILE"
+else
+last_pwm=-1
+last_temp=-1000
+fi
+}
+
+write_state() {
+umask 022
+cat >"$STATE_FILE" <<EOF
+last_pwm=$1
+last_temp=$2
+EOF
+}
+
+apply_pwm() {
+local pwm=$1 output
+for output in "${PWM_OUTPUTS[@]}"; do
+printf '%s\n' "$pwm" >"$output"
+done
+}
+
+main_loop() {
+local temp_c target_pwm
+
+read_state
+
+while true; do
+if ! temp_c=$(read_max_hdd_temp); then
+apply_pwm "$SAFE_PWM"
+write_state "$SAFE_PWM" -1000
+sleep "$SLEEP_SECS"
+continue
+fi
+
+target_pwm=$(target_pwm_for_temp "$temp_c")
+
+if (( last_pwm == -1 )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( temp_c >= FULL_SPEED_ON_C && last_pwm < 183 )); then
+apply_pwm 183
+last_pwm=183
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( last_pwm == 183 && temp_c >= FULL_SPEED_OFF_C )); then
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( target_pwm > last_pwm )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+if (( target_pwm < last_pwm && temp_c <= last_temp - HYSTERESIS_C )); then
+apply_pwm "$target_pwm"
+last_pwm=$target_pwm
+last_temp=$temp_c
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+continue
+fi
+
+write_state "$last_pwm" "$last_temp"
+sleep "$SLEEP_SECS"
+done
+}
+
+main_loop
+```
+
+```bash
+sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
+```
+
+**HDD fan service** (`sudo nano /etc/systemd/system/hdd-fan-curve.service`):
+```ini
+[Unit]
+Description=HDD fan control curve for Zettlab NAS
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/hdd-fan-curve.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Activate both services:
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now cpu-fan-curve.service hdd-fan-curve.service
 ```
 
-#### 7.6 Useful Runtime Commands
+#### 7.5 Service Management & Runtime Commands
+Reload and restart after editing:
 ```bash
-# Current temps & fan state
+systemctl daemon-reload
+systemctl restart cpu-fan-curve.service hdd-fan-curve.service
+```
+
+Useful runtime commands:
+```bash
 cat /sys/class/hwmon/hwmon7/temp1_input
 cat /sys/class/hwmon/hwmon8/pwm3_enable
 cat /sys/class/hwmon/hwmon8/pwm3
 cat /sys/class/hwmon/hwmon8/fan3_input
-
-# Manual overrides (service will re-take control on next cycle)
-echo 1 | sudo tee /sys/class/hwmon/hwmon8/pwm3_enable
-echo 120 | sudo tee /sys/class/hwmon/hwmon8/pwm3
 ```
+
+**Final CPU Fan Control Design**  
+CPU auto mode was unstable (fan dropped to 0 RPM).  
+Active curve and hysteresis are exactly as coded in the scripts above.  
+Fail-safe: if temp read fails, set PWM to 120.  
+Tested under near-100% CPU load with no thermal throttling.
 
 ### Known Hardware Support in Ubuntu 26.04
 - **Fans**: Fully supported via the community DKMS kernel module (`zettlab_d8_fans`).
@@ -223,6 +517,6 @@ echo 120 | sudo tee /sys/class/hwmon/hwmon8/pwm3
 - **HDMI output**: Works normally once front display is disabled.
 
 ### CPU Power Limit (Important Hardware Limitation)
-The Zettlab D6/D8 Ultra uses an **Intel Core Ultra 5 125H** with **PL1/PL2 hard-locked to 40 W** in the BIOS. This limit remains even after installing Ubuntu 26.04. Tune Linux power management (powersave governor, TLP, auto-cpufreq) for best efficiency inside the 40 W envelope.
+The Zettlab D6/D8 Ultra uses an **Intel Core Ultra 5 125H** processor with **PL1/PL2 hard-locked to 40 W** in the BIOS. This limit remains even after installing Ubuntu 26.04.
 
 **This guide was made possible with detailed information and testing shared by Speedster and Daisan on the Zettlab Discord.**
