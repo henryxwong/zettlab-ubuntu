@@ -32,35 +32,68 @@ Download the Ubuntu Server 26.04 ISO and write it to the USB.
    ```
 5. Press **Ctrl+X** or **F10** to boot.
 
-## Step 4: Connect to the Installer over SSH (Recommended)
-The installer starts directly in text mode.
+## Step 4: Backup ZettOS over SSH (Critical!) – Using Ctrl+Alt+F2 method
+1. On the live installer machine, press **Ctrl + Alt + F2** (or try **F3** / **F4**) to switch to a root console.  
+   You should now be at a `#` root prompt.
 
-1. When the installer screen appears, configure networking (DHCP is fine).
-2. The installer will display **SSH connection instructions** on the main screen (or in the Help menu once networking is up).
-3. From your other computer, connect using the shown command (usually something like `ssh ubuntu@NAS-IP`).
-4. You are now fully inside the installer over SSH.
-
-## Step 5: Backup ZettOS over SSH (Critical!)
-While connected via SSH to the live installer:
-
-1. Identify the internal M.2 drive:
+2. Get your IP address:
    ```bash
-   lsblk -d -o NAME,SIZE,MODEL,TRAN
-   sudo nvme list
+   ip -4 addr show
    ```
-(It is almost always `/dev/nvme0n1`.)
+(Look for the line that starts with `inet` under your network interface — usually `enp*` or `eth*`. Example: `inet 192.168.1.45/24` → your IP is **192.168.1.45**)
 
-2. On your **remote computer**, run the backup:
+3. Set a password for the `ubuntu-server` user:
    ```bash
-   ssh ubuntu@NAS-IP "sudo dd if=/dev/nvme0n1 bs=4M status=progress conv=fsync" | pv > zettos-backup.img
+   passwd ubuntu-server
+   ```
+   (Type your chosen password twice when prompted.)
+
+4. Press **Ctrl + Alt + F1** to return to the main installer screen.
+
+5. On your **remote computer**, run the backup (use the password you just set):
+
+   ```bash
+   ssh ubuntu-server@NAS-IP "sudo dd if=/dev/nvme0n1 bs=4M status=progress conv=fsync" | pv > zettos-backup.img
    ```
 
-**Do not proceed until the backup is complete and verified.**
+   (Replace `NAS-IP` with the IP you found in step 2.)
+
+6. **Verify the backup integrity (mandatory)**  
+   After the backup finishes:
+
+   - On your **remote computer**:
+     ```bash
+     sha256sum zettos-backup.img | tee zettos-backup.img.sha256
+     ```
+
+   - Then run the following command **on the live installer** (open a new SSH session with `ubuntu-server` or use the existing one):
+     ```bash
+     sudo sha256sum /dev/nvme0n1
+     ```
+
+   - Compare the two long hashes.  
+     **They must be identical.** If they match, your backup is verified and safe to use.
+
+**Do not proceed until the backup is complete AND the checksums match.**
+
+## Step 5: Connect to the Installer over SSH (for installation)
+1. On the main installer screen, go to **Help** → **Help on SSH Access**.
+2. The Help screen will display the exact SSH command and temporary password for the **`installer`** user.
+
+   Example:
+   ```
+   ssh installer@192.168.1.XXX
+   Password: [random temporary password]
+   ```
+
+3. From your other computer, connect using the command and password shown in Help.
+
+You are now fully inside the installer over SSH and can continue with the installation.
 
 ## Step 6: Perform the Installation
-Continue the installer over SSH:
-- Choose the internal M.2 drive (`/dev/nvme0n1`)
-- Use guided storage
+Continue through the installer over SSH:
+- Select the internal M.2 drive (`/dev/nvme0n1`)
+- Use guided storage layout
 - Create your user account
 - Finish installation and reboot
 
@@ -80,6 +113,6 @@ sudo apt install lm-sensors smartmontools curl git -y
 - **CPU**: Intel Core Ultra 5 125H – PL1/PL2 locked at 40 W
 
 ## Next Steps
-- **[Fan Control Guide](fan-control.md)** – Install the Zettlab fan kernel module and custom temperature-based services (strongly recommended).
-- **[LCD Dashboard – Headless Server](lcd-python-headless.md)** – Pure Python direct framebuffer dashboard (recommended for Server installs).
-- **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)** – Only if you later decide to install a minimal desktop environment.
+- **[Fan Control Guide](fan-control.md)**
+- **[LCD Dashboard – Headless Server](lcd-python-headless.md)**
+- **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
