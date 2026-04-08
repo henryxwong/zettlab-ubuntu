@@ -1,13 +1,11 @@
-# NAS Fan Control Guide
+# Fan Control Guide for Zettlab D6/D8 Ultra on Ubuntu 26.04
 
 ## Scope
-
 This document captures what was implemented on this NAS to expose fan telemetry, monitor it with Netdata, and control the CPU fan with a custom temperature-based service on Ubuntu.
 
 The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
 
 ## What Is Implemented
-
 1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
 2. `lm-sensors` is installed for local sensor visibility.
 3. Netdata is installed and claimed to Netdata Cloud for monitoring.
@@ -16,7 +14,6 @@ The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` 
 6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver as shipped on Ubuntu.
 
 ## Why A Custom Service Was Needed
-
 The Zettlab fan driver accepts PWM values in the range `0-183`.
 
 Ubuntu's stock `fancontrol` tooling assumes a `0-255` style PWM range during probing and startup:
@@ -27,7 +24,6 @@ Ubuntu's stock `fancontrol` tooling assumes a `0-255` style PWM range during pro
 The custom service avoids that issue by writing only valid `0-183` values.
 
 ## Fan Layout
-
 - `fan1`: rear disk fan 1
 - `fan2`: rear disk fan 2
 - `fan3`: CPU fan
@@ -40,7 +36,6 @@ On this system:
 - HDD fans are driven from SATA SMART temperatures by a separate service
 
 ## Important Paths
-
 - Kernel module source: `/usr/src/zettlab-d8-fans-0.0.1`
 - CPU fan controller script: `/usr/local/sbin/cpu-fan-curve.sh`
 - CPU fan controller service: `/etc/systemd/system/cpu-fan-curve.service`
@@ -52,10 +47,10 @@ On this system:
 - CPU package temp input: `/sys/class/hwmon/hwmon7/temp1_input`
 
 ## Installed Packages
-
 - `dkms`
 - `build-essential`
 - `lm-sensors`
+- `smartmontools`
 - Netdata static install under `/opt/netdata`
 
 Removed:
@@ -65,13 +60,11 @@ Removed:
 ## Kernel Module Setup
 
 ### Prerequisites
-
 - Secure Boot disabled
 - kernel headers present for the running kernel
 - `dkms` installed
 
 ### DKMS Install Flow
-
 Source files were placed in:
 
 ```bash
@@ -81,20 +74,26 @@ Source files were placed in:
 Then installed with:
 
 ```bash
-dkms add -m zettlab-d8-fans -v 0.0.1
-dkms build -m zettlab-d8-fans -v 0.0.1
-dkms install -m zettlab-d8-fans -v 0.0.1
-modprobe zettlab_d8_fans
+sudo apt install dkms build-essential git smartmontools lm-sensors -y
+git clone https://github.com/haveacry/zettlab-d8-fans.git
+cd zettlab-d8-fans
+
+sudo mkdir -p /usr/src/zettlab-d8-fans-0.0.1
+sudo cp -r * /usr/src/zettlab-d8-fans-0.0.1/
+
+sudo dkms add -m zettlab-d8-fans -v 0.0.1
+sudo dkms build -m zettlab-d8-fans -v 0.0.1
+sudo dkms install -m zettlab-d8-fans -v 0.0.1
+sudo modprobe zettlab_d8_fans
 ```
 
 Automatic module load at boot:
 
 ```bash
-echo zettlab_d8_fans > /etc/modules-load.d/zettlab_d8_fans.conf
+echo zettlab_d8_fans | sudo tee /etc/modules-load.d/zettlab_d8_fans.conf
 ```
 
 ### Verifying The Module
-
 ```bash
 lsmod | grep zettlab_d8_fans
 cat /sys/class/hwmon/hwmon*/name
@@ -108,7 +107,6 @@ zettlab_d8_fans
 ```
 
 ## Netdata Setup
-
 Netdata native packages were not available for Ubuntu 26.04 `resolute`, so the static install path was used.
 
 Installed using the Netdata kickstart script with:
@@ -127,7 +125,6 @@ curl -fsS http://127.0.0.1:19999/api/v1/info
 Netdata successfully discovered the Zettlab fan sensors and exposed the CPU fan RPM chart.
 
 ## lm-sensors Notes
-
 `lm-sensors` works without extra configuration.
 
 The optional docs snippet below was not added because it only remaps PWM display values and is not required for monitoring:
@@ -148,7 +145,6 @@ sensors
 ## Final CPU Fan Control Design
 
 ### Why CPU Auto Mode Was Not Used
-
 The driver's documented CPU auto mode:
 
 ```bash
@@ -165,7 +161,6 @@ Because of that, the implemented approach is:
 4. keep a top-end hysteresis band to avoid bouncing near full speed
 
 ### Active Curve
-
 Current logic:
 
 - `<48 C` -> `100`
@@ -348,7 +343,6 @@ WantedBy=multi-user.target
 ## HDD Fan Control Design
 
 ### Temperature Source
-
 The HDD fan controller reads SMART temperatures from the four SATA drives:
 
 - `/dev/sda`
@@ -359,7 +353,6 @@ The HDD fan controller reads SMART temperatures from the four SATA drives:
 It uses the highest drive temperature as the control input for both HDD fans.
 
 ### Why SMART Was Used
-
 For HDD fans, CPU temperature is the wrong signal.
 
 Disk fan control should follow disk temperature, not CPU package temperature.
@@ -367,7 +360,6 @@ Disk fan control should follow disk temperature, not CPU package temperature.
 This NAS exposes reliable SMART temperatures through `smartctl`, so the HDD fan service uses those values directly.
 
 ### HDD Fan Curve
-
 Current logic:
 
 - `<35 C` -> `80`
@@ -560,18 +552,17 @@ WantedBy=multi-user.target
 ```
 
 ## Service Management
-
 Reload and restart after editing:
 
 ```bash
 systemctl daemon-reload
-systemctl restart cpu-fan-curve.service
+systemctl restart cpu-fan-curve.service hdd-fan-curve.service
 ```
 
 Enable at boot:
 
 ```bash
-systemctl enable cpu-fan-curve.service
+systemctl enable cpu-fan-curve.service hdd-fan-curve.service
 ```
 
 Check status:
@@ -584,7 +575,6 @@ cat /run/cpu-fan-curve.state
 ## Useful Runtime Commands
 
 ### Read Current CPU Temp And Fan State
-
 ```bash
 cat /sys/class/hwmon/hwmon7/temp1_input
 cat /sys/class/hwmon/hwmon8/pwm3_enable
@@ -593,29 +583,24 @@ cat /sys/class/hwmon/hwmon8/fan3_input
 ```
 
 ### Force CPU Fan Manual Mode
-
 ```bash
 echo 1 > /sys/class/hwmon/hwmon8/pwm3_enable
 ```
 
 ### Set CPU Fan PWM Manually
-
 ```bash
 echo 120 > /sys/class/hwmon/hwmon8/pwm3
 ```
 
 ### Return To Custom Service Control
-
 Just leave the service running. It will overwrite manual test values on its next loop iteration.
 
 ## Testing Summary
 
 ### Partial-Load Test
-
 An earlier 3-minute test with only `12` workers showed about `67%` total CPU usage because the system has `18` logical CPUs.
 
 ### Near-100% Load Test
-
 A later 3-minute test used `18` workers and reached about `96-100%` CPU usage.
 
 Observed behavior:
@@ -626,7 +611,6 @@ Observed behavior:
 - `Thermal throttle` column remained `false` for every sampled interval
 
 ## Thermal Throttling Check
-
 Thermal throttling was checked using kernel counters under:
 
 ```bash
@@ -638,7 +622,6 @@ No new throttle events were recorded during the tested near-100% sampled run.
 That suggests the fan control was sufficient to keep the CPU from thermal throttling during the measured intervals.
 
 ## Generated Test Reports
-
 3-minute test tables were saved here:
 
 ```bash
@@ -652,7 +635,6 @@ This report includes:
 - 3-minute near-100% load test with `Thermal throttle` column
 
 ## Recommended Sharing Notes
-
 If someone wants to reproduce this on a similar NAS:
 
 1. install the Zettlab fan module through DKMS

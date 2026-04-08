@@ -1,6 +1,6 @@
-**Guide: Pure Python Direct DRM Front LCD Dashboard on Zettlab D6/D8 Ultra (Ubuntu Server 26.04)**
+# LCD Dashboard – Headless Server (Python Direct DRM) for Zettlab D6/D8 Ultra
 
-### 1. What This Achieves
+**What This Achieves**
 - Keeps the **front LCD** (3.49-inch, 640×172) turned **on** at all times  
 - Displays custom real-time status (CPU %, temp, fans, max HDD temp, IP, storage)  
 - **Zero X11 / Wayland / GNOME** — runs directly on the Linux framebuffer (`/dev/fb0`)  
@@ -28,7 +28,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:640x172M,HDMI-A-1:1920x1080
 ```
 
 **Adjustments you may need:**
-- HDMI output name: `HDMI-A-1`, `HDMI-1`, or `HDMI-2` (check later with `xrandr` or `cat /sys/class/drm/card*-HDMI*/status`)
+- HDMI output name: `HDMI-A-1`, `HDMI-1`, or `HDMI-2` (check later with `cat /sys/class/drm/card*-HDMI*/status`)
 - Resolution: `1920x1080@60M` (1080p) or `3840x2160@60M` (4K)
 
 Save & exit, then apply:
@@ -189,3 +189,5 @@ journalctl -u zettlab-lcd.service -f           # live logs
 - Wrong HDMI resolution → Double-check the `video=` line in GRUB
 - No sensor data → Confirm `lsmod | grep zettlab_d8_fans` and `sensors`
 - /tank mountpoint different → Edit the script accordingly
+
+This is the **recommended** LCD solution for Ubuntu Server installations — clean, stable, and truly headless.
