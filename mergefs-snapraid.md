@@ -79,8 +79,9 @@ The steps below follow the recommended/default setup (XFS data + Btrfs parity). 
    UUID=cccccccc-cccc-cccc-cccc-cccccccccccc /mnt/parity btrfs defaults,noatime,compress=no,autodefrag 0 2
    ```
 
-   Test mounts:
+   Reload systemd and test mounts:
    ```bash
+   sudo systemctl daemon-reload
    sudo mount -a
    df -h | grep -E 'disk|parity|pool'
    ```
@@ -123,8 +124,9 @@ Add this line to the end of `/etc/fstab`:
 /mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=pfrd,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
 ```
 
-Mount the pool:
+Reload systemd and mount the pool:
 ```bash
+sudo systemctl daemon-reload
 sudo mount -a
 ls /mnt/pool
 ```
