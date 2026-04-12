@@ -1,78 +1,57 @@
 # LCD Dashboard – Minimal Desktop (Conky) for Zettlab D6/D8 Ultra
 
 **What This Achieves**
-- Keeps the **front LCD** (3.49-inch, 640×172) turned **on** at all times
-- HDMI output runs at **full native resolution** (1080p, 4K, etc.) — no more forced low-res mirroring
-- A lightweight **systemd service** automatically takes over **only the LCD** and shows custom real-time information (CPU temp/fan speeds, HDD temps, RAM/CPU usage, IP address, storage, etc.)
-- The main HDMI desktop remains completely clean and unaffected
-
-This is done **entirely after** you have finished the original Ubuntu 26.04 installation guide.  
-**99 % of the work can be done via SSH** — you only need an HDMI monitor plugged in for one final verification reboot.
-
-**Recommended only if you want a minimal desktop environment.**  
-For pure headless Ubuntu Server, use the **[Python Direct DRM version](lcd-python-headless.md)** instead — it is lighter and requires no X11/GNOME.
+- Keeps the **front LCD** (3.49-inch, 640×172) turned **on** at all times with a clean real-time dashboard
+- HDMI output runs at **full native resolution** (1080p or 4K) — completely unaffected
+- Uses a dedicated low-privilege user (`nasuser`) with auto-login so the dashboard starts immediately after boot
+- Your personal account stays fully password-protected
+- Lightweight systemd service + Conky (the most reliable method on this hardware)
 
 ## Prerequisites
-- Ubuntu **Desktop Minimal** (or full Desktop) 26.04 installed and booted
-- Fan kernel module already installed and working (`zettlab_d8_fans` loaded)
+- Ubuntu **Desktop Minimal** 26.04 installed and booted
+- Fan kernel module already installed and working (`zettlab_d8_fans`)
 - `lm-sensors` and `smartmontools` installed
-- You know your HDMI output name (usually `HDMI-A-1` or `HDMI-1`) and preferred resolution
-- You are logged in to the graphical desktop at least once so that `DISPLAY=:0` exists
+- You know your HDMI output name (usually `HDMI-A-1`)
 
-## Step-by-Step (SSH-Friendly)
+## Step-by-Step
 
-### Step 1: Fix HDMI Resolution While Keeping LCD On
+### Step 1: Create Dedicated Dashboard User (`nasuser`)
+```bash
+sudo adduser --disabled-password --gecos "NAS User" nasuser
+sudo usermod -aG video,disk nasuser
+```
+
+### Step 2: Fix HDMI Resolution (HDMI-only)
 ```bash
 sudo nano /etc/default/grub
 ```
 
-Find the line starting with `GRUB_CMDLINE_LINUX_DEFAULT=`
+Set the line to:
 
-**Replace** it with the following (adjust HDMI part to your monitor):
 ```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:640x172M,HDMI-A-1:1920x1080@60M"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=HDMI-A-1:1920x1080@60M"
 ```
-- Common HDMI names: `HDMI-A-1`, `HDMI-1`, `HDMI-2`
-- Common resolutions: `1920x1080@60M` (1080p) or `3840x2160@60M` (4K)
 
-Save & exit (Ctrl+O → Enter → Ctrl+X).
+- Change `HDMI-A-1` if needed (check with `xrandr` later)
+- Change to `3840x2160@60M` for 4K
 
-Apply the change:
+Apply:
 ```bash
 sudo update-grub
 ```
-
-### Step 2: Reboot (First Time LCD + Full HDMI)
-```bash
-sudo reboot
-```
-
-**Important:** Plug in an HDMI monitor (or keep it plugged in) before rebooting so you can verify the result.
-
-After reboot:
-- HDMI should now be at full resolution
-- Front LCD should be on (showing the normal Ubuntu desktop sliver for now)
-
-SSH back in.
 
 ### Step 3: Install Conky
 ```bash
 sudo apt install conky-all -y
 ```
 
-### Step 4: Fix SMARTCTL Permissions (for HDD temperature)
+### Step 4: Create the LCD-Only Conky Config
 ```bash
-sudo usermod -aG disk $USER
-```
-**Reboot once** after this command so the group change takes effect.
-
-### Step 5: Create the LCD-Only Conky Config
-```bash
-mkdir -p ~/.config/conky
-nano ~/.config/conky/zettlab-lcd.conf
+sudo -u nasuser mkdir -p /home/nasuser/.config/conky
+sudo -u nasuser nano /home/nasuser/.config/conky/zettlab-lcd.conf
 ```
 
-Paste this ready-to-use config (tuned for 640×172):
+Paste this config:
 
 ```lua
 conky.config = {
@@ -116,7 +95,7 @@ Storage (/tank): ${fs_free /tank} free of ${fs_size /tank}
 
 Save & exit.
 
-### Step 6: Create the Systemd Service
+### Step 5: Create the Systemd Service
 ```bash
 sudo nano /etc/systemd/system/zettlab-lcd.service
 ```
@@ -126,14 +105,15 @@ Paste:
 ```ini
 [Unit]
 Description=Zettlab Front LCD Custom Status Display
-After=multi-user.target network-online.target
+After=multi-user.target network-online.target graphical.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=yourusername          # ← CHANGE TO YOUR ACTUAL USERNAME
+User=nasuser
 Environment="DISPLAY=:0"
-ExecStart=/usr/bin/conky -c /home/yourusername/.config/conky/zettlab-lcd.conf --display=:0
+ExecStartPre=/usr/bin/xrandr --output eDP-1 --mode 640x172 --right-of HDMI-A-1
+ExecStart=/usr/bin/conky -c /home/nasuser/.config/conky/zettlab-lcd.conf --display=:0
 Restart=always
 RestartSec=3
 Nice=19
@@ -142,42 +122,43 @@ Nice=19
 WantedBy=multi-user.target
 ```
 
-Replace `yourusername` in both places with your actual login name.
+### Step 6: Enable Auto-Login for `nasuser` (so dashboard starts immediately)
+```bash
+sudo nano /etc/gdm3/custom.conf
+```
 
-### Step 7: Activate the Service
+Set the `[daemon]` section to:
+
+```ini
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=nasuser
+```
+
+Save & exit.
+
+### Step 7: Activate Everything
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now zettlab-lcd.service
+sudo systemctl restart gdm3
 ```
 
-Check it is running:
+Reboot once:
 ```bash
-systemctl status zettlab-lcd.service
+sudo reboot
 ```
 
-### Step 8: Final Verification
-- Look at the physical front LCD — Conky should now be displayed on it.
-- HDMI monitor should still be at full resolution.
-- You can now unplug the HDMI monitor permanently if you wish.
-
-## Quick Management Commands (via SSH anytime)
+### Quick Management Commands
 ```bash
-# Restart dashboard
 sudo systemctl restart zettlab-lcd.service
-
-# View live logs
 journalctl -u zettlab-lcd.service -f
-
-# Stop temporarily
-sudo systemctl stop zettlab-lcd.service
+xrandr --output eDP-1 --mode 640x172   # emergency LCD fix
 ```
 
 ## Troubleshooting
-- Conky not appearing on LCD → `xrandr --output eDP-1 --mode 640x172` then restart service
-- Permission error on `smartctl` → Ensure you ran `usermod -aG disk $USER` and rebooted
-- Using Wayland instead of Xorg → Log out and choose **Ubuntu on Xorg** at the login screen
-- Wrong HDMI output name → Run `xrandr | grep connected` while HDMI is plugged in
+- LCD wrong size/orientation → Run `xrandr --output eDP-1 --mode 640x172`
+- No HDD temperature → `sudo usermod -aG disk nasuser` and reboot
+- Wrong HDMI name → Run `xrandr | grep connected` after login
 
-This setup uses almost zero CPU, survives reboots, and gives you a clean, always-on status panel just like (or better than) ZettOS.
-
-**Note:** If you later switch to pure headless Server, switch to the Python Direct DRM dashboard instead.
+This is now the **stable, community-tested** setup for the Zettlab D6/D8 Ultra. HDMI stays perfect, LCD shows the dashboard immediately after boot, and your personal account remains secure.

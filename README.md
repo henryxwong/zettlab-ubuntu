@@ -26,10 +26,9 @@ See the official Zettlab documentation for third-party OS flashing:
 
 - **[Installation Guide](ubuntu-installation.md)** – Ubuntu Server 26.04 (recommended, headless via SSH)
 - **[Fan Control Guide](fan-control.md)**
-- **[LCD Dashboard – Headless Server (Recommended)](lcd-python-headless.md)**
 - **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
 
 **Recommended Workflow**  
 1. Start with **[Installation Guide](ubuntu-installation.md)**.  
 2. Immediately follow **[Fan Control Guide](fan-control.md)**.  
-3. Choose the LCD dashboard that matches your install type.
+3. Choose the LCD dashboard that matches your installation type.
