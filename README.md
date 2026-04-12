@@ -20,17 +20,16 @@ See the official Zettlab documentation for third-party OS flashing:
   - `fan3`: CPU fan
 - **Networking**: RTL8127 NICs (works out-of-the-box)
 - **RGB / LED strip**: Detected as USB device (`lsusb`) but no driver available
-- **Storage**: Internal M.2 NVMe system drive + 4× SATA HDD bays
 
 ## Table of Contents
 
-- **[Installation Guide](ubuntu-installation.md)** – Ubuntu Server 26.04 (recommended, headless via SSH)
+- **[Installation Guide](ubuntu-installation.md)**
 - **[Fan Control Guide](fan-control.md)**
-- **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)** – Recommended for pooling the 5 data disks + parity
+- **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**
 - **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
 
 **Recommended Workflow**
 1. Start with **[Installation Guide](ubuntu-installation.md)**.
 2. Immediately follow **[Fan Control Guide](fan-control.md)**.
-3. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)** (critical for data protection).
+3. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
 4. Set up LCD dashboard
