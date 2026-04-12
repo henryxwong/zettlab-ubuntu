@@ -63,7 +63,6 @@ On this system:
 Netdata is **optional** — skip this section if you only want basic fan control.
 
 ```bash
-# Optional: Install Netdata (static method works well on Ubuntu 26.04)
 sudo bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
 ```
 
@@ -74,14 +73,7 @@ systemctl status netdata
 curl -fsS http://127.0.0.1:19999/api/v1/info
 ```
 
-Netdata will automatically discover the Zettlab fan sensors.
-
 ## Kernel Module Setup
-
-### Prerequisites
-- Secure Boot disabled
-- kernel headers present for the running kernel
-- `dkms` installed (already done in the package step above)
 
 ### DKMS Install Flow
 ```bash
@@ -110,11 +102,7 @@ cat /sys/class/hwmon/hwmon*/name
 sensors
 ```
 
-Expected `hwmon` name:
-
-```text
-zettlab_d8_fans
-```
+Expected `hwmon` name: `zettlab_d8_fans`
 
 ## lm-sensors Notes
 `lm-sensors` works without extra configuration.
@@ -128,52 +116,21 @@ sensors
 ## Final CPU Fan Control Design
 
 ### Why CPU Auto Mode Was Not Used
-The driver's documented CPU auto mode:
-
-```bash
-echo 2 > /sys/class/hwmon/hwmon8/pwm3_enable
-```
-
-was unstable in testing. At multiple points the CPU fan dropped to `0 RPM`.
-
-Because of that, the implemented approach is:
-
-1. force CPU fan manual mode
-2. read CPU package temperature
-3. map temperature to safe PWM values
-4. keep a top-end hysteresis band to avoid bouncing near full speed
+The driver's documented CPU auto mode (`pwm3_enable=2`) was unstable in testing (fan sometimes dropped to 0 RPM).  
+The custom service forces manual mode and uses a reliable temperature curve.
 
 ### Active Curve
-Current logic:
+- `<48 °C` → `100`
+- `48-55 °C` → `120`
+- `56-63 °C` → `140`
+- `64-71 °C` → `160`
+- `≥72 °C` → `183`
 
-- `<48 C` → `100`
-- `48-55 C` → `120`
-- `56-63 C` → `140`
-- `64-71 C` → `160`
-- `>=72 C` → `183`
+Top-end hysteresis: stays at 183 until temperature drops below 68 °C.
 
-Top-end hysteresis:
+## Exact Script Code – CPU Fan
 
-- switch to `183` at `72 C` or above
-- stay at `183` until temperature drops below `68 C`
-
-Polling behavior:
-
-- loop interval: `2s`
-- standard downshift hysteresis: `2 C`
-- only valid `0-183` PWM values are written
-
-Fail-safe behavior:
-
-- if temp read fails, set `pwm3=120`
-
-## Exact Script Code
-
-File:
-
-```bash
-/usr/local/sbin/cpu-fan-curve.sh
-```
+File: `/usr/local/sbin/cpu-fan-curve.sh`
 
 ```bash
 #!/bin/bash
@@ -197,7 +154,6 @@ read_temp_c() {
 
 target_pwm_for_temp() {
     local temp_c=$1
-
     if (( temp_c >= FULL_SPEED_ON_C )); then
         printf '183\n'
     elif (( temp_c >= 64 )); then
@@ -213,7 +169,6 @@ target_pwm_for_temp() {
 
 read_state() {
     if [[ -r "$STATE_FILE" ]]; then
-        # shellcheck disable=SC1090
         source "$STATE_FILE"
     else
         last_pwm=-1
@@ -300,13 +255,14 @@ main_loop() {
 main_loop
 ```
 
-## Exact systemd Unit Code
-
-File:
-
+Make executable:
 ```bash
-/etc/systemd/system/cpu-fan-curve.service
+sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
 ```
+
+## CPU Fan systemd Service
+
+File: `/etc/systemd/system/cpu-fan-curve.service`
 
 ```ini
 [Unit]
@@ -325,51 +281,11 @@ WantedBy=multi-user.target
 
 ## HDD Fan Control Design
 
-### Temperature Source
-The HDD fan controller reads SMART temperatures from the four SATA drives:
+The HDD fan service uses the highest SMART temperature from the four SATA drives (`/dev/sda` to `/dev/sdd`).
 
-- `/dev/sda`
-- `/dev/sdb`
-- `/dev/sdc`
-- `/dev/sdd`
+## Exact Script Code – HDD Fan
 
-It uses the highest drive temperature as the control input for both HDD fans.
-
-### Why SMART Was Used
-For HDD fans, CPU temperature is the wrong signal.
-
-Disk fan control should follow disk temperature, not CPU package temperature.
-
-This NAS exposes reliable SMART temperatures through `smartctl`, so the HDD fan service uses those values directly.
-
-### HDD Fan Curve
-Current logic:
-
-- `<35 C` → `80`
-- `35-39 C` → `100`
-- `40-42 C` → `120`
-- `43-45 C` → `140`
-- `>=46 C` → `183`
-
-Top-end hysteresis:
-
-- switch to `183` at `46 C` or above
-- stay at `183` until temp drops below `44 C`
-
-Polling behavior:
-
-- loop interval: `20s`
-- standard downshift hysteresis: `1 C`
-
-The slower poll interval is intentional because SMART polling is heavier than direct `hwmon` reads.
-
-### Exact HDD Script Code
-
-File:
-
-```bash
-/usr/local/sbin/hdd-fan-curve.sh
-```
+File: `/usr/local/sbin/hdd-fan-curve.sh`
 
 ```bash
 #!/bin/bash
@@ -407,7 +323,6 @@ read_max_hdd_temp() {
 
 target_pwm_for_temp() {
     local temp_c=$1
-
     if (( temp_c >= FULL_SPEED_ON_C )); then
         printf '183\n'
     elif (( temp_c >= 43 )); then
@@ -423,7 +338,6 @@ target_pwm_for_temp() {
 
 read_state() {
     if [[ -r "$STATE_FILE" ]]; then
-        # shellcheck disable=SC1090
         source "$STATE_FILE"
     else
         last_pwm=-1
@@ -511,13 +425,14 @@ main_loop() {
 main_loop
 ```
 
-### Exact HDD systemd Unit Code
-
-File:
-
+Make executable:
 ```bash
-/etc/systemd/system/hdd-fan-curve.service
+sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
 ```
+
+## HDD Fan systemd Service
+
+File: `/etc/systemd/system/hdd-fan-curve.service`
 
 ```ini
 [Unit]
@@ -535,95 +450,42 @@ WantedBy=multi-user.target
 ```
 
 ## Service Management
-Reload and restart after editing:
+After creating both scripts and service files:
 
 ```bash
-systemctl daemon-reload
-systemctl restart cpu-fan-curve.service hdd-fan-curve.service
-```
-
-Enable at boot:
-
-```bash
-systemctl enable cpu-fan-curve.service hdd-fan-curve.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now cpu-fan-curve.service hdd-fan-curve.service
 ```
 
 Check status:
-
 ```bash
 systemctl status cpu-fan-curve.service
-cat /run/cpu-fan-curve.state
+systemctl status hdd-fan-curve.service
 ```
 
 ## Useful Runtime Commands
 
-### Read Current CPU Temp And Fan State
+**Important:** Always use `echo … | sudo tee …` when writing to sysfs files.
+
 ```bash
+# Read current values
 cat /sys/class/hwmon/hwmon7/temp1_input
 cat /sys/class/hwmon/hwmon8/pwm3_enable
 cat /sys/class/hwmon/hwmon8/pwm3
 cat /sys/class/hwmon/hwmon8/fan3_input
+
+# Force manual mode (example)
+echo 1 | sudo tee /sys/class/hwmon/hwmon8/pwm3_enable
+
+# Set PWM manually (example)
+echo 120 | sudo tee /sys/class/hwmon/hwmon8/pwm3
 ```
-
-### Force CPU Fan Manual Mode
-```bash
-echo 1 > /sys/class/hwmon/hwmon8/pwm3_enable
-```
-
-### Set CPU Fan PWM Manually
-```bash
-echo 120 > /sys/class/hwmon/hwmon8/pwm3
-```
-
-### Return To Custom Service Control
-Just leave the service running. It will overwrite manual test values on its next loop iteration.
-
-## Testing Summary
-
-### Partial-Load Test
-An earlier 3-minute test with only `12` workers showed about `67%` total CPU usage because the system has `18` logical CPUs.
-
-### Near-100% Load Test
-A later 3-minute test used `18` workers and reached about `96-100%` CPU usage.
-
-Observed behavior:
-
-- initial temperature spike: up to `87 C`
-- steady-state after ramp-up: about `70-73 C`
-- CPU fan at steady-state full speed: about `4791-4845 RPM`
-- `Thermal throttle` column remained `false` for every sampled interval
-
-## Thermal Throttling Check
-Thermal throttling was checked using kernel counters under:
-
-```bash
-/sys/devices/system/cpu/cpu*/thermal_throttle/
-```
-
-No new throttle events were recorded during the tested near-100% sampled run.
-
-That suggests the fan control was sufficient to keep the CPU from thermal throttling during the measured intervals.
-
-## Generated Test Reports
-3-minute test tables were saved here:
-
-```bash
-/tank/Downloads/cpu_fan_3min_test.md
-```
-
-This report includes:
-
-- 3-minute partial-load test
-- 3-minute near-100% load test
-- 3-minute near-100% load test with `Thermal throttle` column
 
 ## Recommended Sharing Notes
-If someone wants to reproduce this on a similar NAS:
-
-1. install the Zettlab fan module through DKMS
-2. verify fans appear in `hwmon`
-3. install `lm-sensors`
-4. (optional) install Netdata if remote monitoring is desired
-5. do not rely on stock `fancontrol` with this driver
-6. use a custom script that only writes valid PWM values in `0-183`
-7. test both fan behavior and throttle counters under sustained CPU load
+1. Install the Zettlab fan module through DKMS
+2. Verify fans appear in `hwmon`
+3. Install `lm-sensors`
+4. (Optional) Install Netdata if you want remote monitoring
+5. Do **not** rely on stock `fancontrol`
+6. Use custom scripts that only write valid `0-183` PWM values
+7. Test under sustained CPU load
