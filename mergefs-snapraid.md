@@ -1,32 +1,32 @@
 # Setting up mergerfs + SnapRAID on Zettlab D6/D8 Ultra (Ubuntu 26.04 Server)
 
 **Disk Assumption**  
-This guide assumes:  
-- `/dev/sda` to `/dev/sde` are your **5 data disks**  
-- `/dev/sdf` is your dedicated **parity disk**  
+This guide assumes:
+- `/dev/sda` to `/dev/sde` are your **5 data disks**
+- `/dev/sdf` is your dedicated **parity disk**
 
 **Critical warning**: Device names (`/dev/sdX`) are **not persistent**. They can change after reboots, kernel updates, or SATA reordering. Always verify with `lsblk` and use **UUIDs** (or `/dev/disk/by-id/`) in `/etc/fstab` and `snapraid.conf`. This assumption is only for initial identification.
 
 **Filesystem Choice (Important!)**  
-**Recommended / default in this guide**:  
-- **Data disks** (`/dev/sda`–`/dev/sde`): **XFS** (best performance + no 16 TB file-size limit)  
-- **Parity disk** (`/dev/sdf`): **Btrfs** (allows cheap snapshot-based replication with `btrfs send | receive`)  
+**Recommended / default in this guide**:
+- **Data disks** (`/dev/sda`–`/dev/sde`): **XFS** (best performance + no 16 TB file-size limit)
+- **Parity disk** (`/dev/sdf`): **Btrfs** (allows cheap snapshot-based replication with `btrfs send | receive`)
 
-You are **free to use any filesystem** you prefer:  
-- `ext4` works great on data disks (and parity) if your parity file will stay under 16 TB.  
-- `XFS` on parity is simpler and slightly faster if you don’t need snapshots.  
-- `Btrfs` on data disks is possible but not recommended (CoW overhead hurts SnapRAID performance).  
+You are **free to use any filesystem** you prefer:
+- `ext4` works great on data disks (and parity) if your parity file will stay under 16 TB.
+- `XFS` on parity is simpler and slightly faster if you don’t need Btrfs snapshots.
+- `Btrfs` on data disks is possible but not recommended (CoW overhead hurts SnapRAID performance).
 
-The steps below follow the recommended/default setup. If you choose differently, adjust the formatting and mount options accordingly.
+The steps below follow the recommended/default setup (XFS data + Btrfs parity). If you choose differently, adjust the formatting and mount options accordingly.
 
-**Recommended Directory Structure**  
-- `/mnt/disk1` – `/mnt/disk5`: Individual data disks  
-- `/mnt/parity`: Parity disk  
+**Recommended Directory Structure**
+- `/mnt/disk1` – `/mnt/disk5`: Individual data disks
+- `/mnt/parity`: Parity disk
 - `/mnt/pool`: mergerfs pooled mount point (this is what you will use daily)
 
 ## Prerequisites
-- Ubuntu 26.04 Server installed and updated (see [ubuntu-installation.md](ubuntu-installation.md))  
-- Fan control module installed and running (see [fan-control.md](fan-control.md))  
+- Ubuntu 26.04 Server installed and updated (see [ubuntu-installation.md](ubuntu-installation.md))
+- Fan control module installed and running (see [fan-control.md](fan-control.md))
 - Disks are detected (`lsblk`) and you have a complete backup
 
 ## Step 1: Prepare the Disks
@@ -75,7 +75,7 @@ The steps below follow the recommended/default setup. If you choose differently,
    UUID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa /mnt/disk4 xfs defaults,noatime 0 2
    UUID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb /mnt/disk5 xfs defaults,noatime 0 2
 
-   # Parity disk (Btrfs – recommended options)
+   # Parity disk (Btrfs)
    UUID=cccccccc-cccc-cccc-cccc-cccccccccccc /mnt/parity btrfs defaults,noatime,compress=no,autodefrag 0 2
    ```
 
@@ -85,23 +85,19 @@ The steps below follow the recommended/default setup. If you choose differently,
    df -h | grep -E 'disk|parity|pool'
    ```
 
-## Step 2: Set up Btrfs Parity (Snapshot-Ready)
+## Step 2: Prepare Parity File (Btrfs)
 
 ```bash
-# Create subvolume for cleaner snapshots
-sudo mount /mnt/parity
-sudo btrfs subvolume create /mnt/parity/parity_snapshots
-sudo umount /mnt/parity
 sudo mount -a
 
-# Create the parity file inside the subvolume
-sudo touch /mnt/parity/parity_snapshots/snapraid.parity
+# Create the parity file directly on the Btrfs root
+sudo touch /mnt/parity/snapraid.parity
 
 # CRITICAL: Disable CoW on the parity file (prevents fragmentation)
-sudo chattr +C /mnt/parity/parity_snapshots/snapraid.parity
+sudo chattr +C /mnt/parity/snapraid.parity
 
 # Verify
-lsattr /mnt/parity/parity_snapshots/snapraid.parity   # should show "C"
+lsattr /mnt/parity/snapraid.parity   # should show "C"
 ```
 
 ## Step 3: Install mergerfs and SnapRAID
@@ -141,7 +137,7 @@ sudo nano /etc/snapraid.conf
 
 ```conf
 # Parity
-parity /mnt/parity/parity_snapshots/snapraid.parity
+parity /mnt/parity/snapraid.parity
 
 # Content files
 content /var/snapraid.content
@@ -173,7 +169,7 @@ sudo snapraid -c /etc/snapraid.conf diff
 sudo snapraid -c /etc/snapraid.conf sync
 ```
 
-## Step 6: Maintenance & Automation + Snapshot Replication
+## Step 6: Maintenance & Automation
 
 Create maintenance script:
 ```bash
@@ -186,15 +182,11 @@ LOG=/var/log/snapraid.log
 echo "=== SnapRAID maintenance started at $(date) ===" >> $LOG
 snapraid -c /etc/snapraid.conf sync >> $LOG 2>&1
 snapraid -c /etc/snapraid.conf scrub -p 8 -o 0 >> $LOG 2>&1
-
-# Optional: Create daily Btrfs snapshot of parity
-sudo btrfs subvolume snapshot -r /mnt/parity/parity_snapshots /mnt/parity/snapshots/parity_$(date +%Y%m%d) >> $LOG 2>&1
-echo "=== SnapRAID + snapshot finished at $(date) ===" >> $LOG
+echo "=== SnapRAID maintenance finished at $(date) ===" >> $LOG
 ```
 
 ```bash
 sudo chmod +x /usr/local/bin/snapraid-maintenance.sh
-sudo mkdir -p /mnt/parity/snapshots
 sudo crontab -e
 ```
 
@@ -203,11 +195,7 @@ Add to cron:
 0 3 * * * /usr/local/bin/snapraid-maintenance.sh
 ```
 
-**Example replication** (run manually or add to script):
-```bash
-# Send latest snapshot to another Btrfs drive
-sudo btrfs send /mnt/parity/snapshots/parity_$(ls -1 /mnt/parity/snapshots | tail -1) | sudo btrfs receive /mnt/backup-drive/
-```
+**Note on snapshots**: The parity disk is formatted as Btrfs so you can later create snapshots for replication (e.g. from NVMe drive). The parity disk is ready whenever you need it.
 
 ## Next Steps
 - Share `/mnt/pool` via Samba/NFS.
