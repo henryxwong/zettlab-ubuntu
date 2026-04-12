@@ -76,6 +76,10 @@ from PIL import Image, ImageDraw, ImageFont
 FB_DEV = "/dev/fb0"          # ← Change to /dev/fb1 if needed
 WIDTH, HEIGHT = 640, 172
 UPDATE_INTERVAL = 2
+
+# Change this to your actual storage mountpoint
+# Common options: "/tank", "/mnt/tank", "/data", "/" (root), or wherever you mounted your big drives
+STORAGE_PATH = "/tank"
 # ===========================================
 
 def get_sensor(path):
@@ -86,8 +90,9 @@ def get_sensor(path):
 
 def get_max_hdd_temp():
     try:
+        # Works with the most common SMART attributes (194 or 190)
         output = subprocess.check_output(
-            "smartctl -A /dev/sda 2>/dev/null | awk '/194/ {print $10; exit} /190/ {print $10; exit}' || echo 0",
+            "smartctl -A /dev/sda 2>/dev/null | awk '/194/ || /190/ {print $10; exit}' || echo 0",
             shell=True, text=True
         ).strip()
         return int(output) if output.isdigit() else 0
@@ -107,14 +112,20 @@ def render():
     fan2 = get_sensor("/sys/class/hwmon/hwmon8/fan2_input")
     hdd_temp = get_max_hdd_temp()
     
+    # Fixed IP extraction (no more SyntaxWarning)
     ip = subprocess.getoutput(
-        "ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1"
+        r"ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1"
     ) or "No IP"
-    
-    storage = psutil.disk_usage("/tank")
-    storage_free_gb = storage.free // (1024**3)
 
-    # Draw text
+    # Storage with safe fallback
+    try:
+        storage = psutil.disk_usage(STORAGE_PATH)
+        storage_free_gb = storage.free // (1024**3)
+        storage_str = f"{storage_free_gb} GB free"
+    except FileNotFoundError:
+        storage_str = "N/A (check STORAGE_PATH)"
+
+    # Draw text on LCD
     y = 8
     draw.text((10, y), "ZETTLAB D6/D8 ULTRA", fill=(0, 255, 255))
     y += 18
@@ -122,9 +133,9 @@ def render():
     y += 15
     draw.text((10, y), f"Disk Fans: {fan1:4}/{fan2:4} RPM    Max HDD: {hdd_temp}°C", fill=(255, 255, 255))
     y += 15
-    draw.text((10, y), f"IP: {ip}     Storage: {storage_free_gb} GB free", fill=(200, 200, 200))
+    draw.text((10, y), f"IP: {ip}     Storage: {storage_str}", fill=(200, 200, 200))
 
-    # Write directly to framebuffer
+    # Write to framebuffer
     with open(FB_DEV, "wb") as f:
         f.write(img.tobytes())
 
@@ -135,7 +146,7 @@ if __name__ == "__main__":
         time.sleep(UPDATE_INTERVAL)
 ```
 
-Make executable:
+Make the script executable:
 ```bash
 sudo chmod +x /usr/local/bin/zettlab-lcd-dashboard.py
 ```
@@ -188,6 +199,6 @@ journalctl -u zettlab-lcd.service -f           # live logs
 - LCD stays black → Check `FB_DEV` and reboot once
 - Wrong HDMI resolution → Double-check the `video=` line in GRUB
 - No sensor data → Confirm `lsmod | grep zettlab_d8_fans` and `sensors`
-- /tank mountpoint different → Edit the script accordingly
+- Storage shows “N/A” → Edit `STORAGE_PATH` in the Python script and restart the service
 
 This is the **recommended** LCD solution for Ubuntu Server installations — clean, stable, and truly headless.
