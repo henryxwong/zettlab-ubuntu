@@ -121,7 +121,7 @@ mergerfs -V
 
 Add this line to the end of `/etc/fstab`:
 ```
-/mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=pfrd,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
+/mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=epmfs,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
 ```
 
 Reload systemd and mount the pool:
@@ -134,17 +134,18 @@ ls /mnt/pool
 ### Mergerfs Policy Reference (Different `category.create` types)
 mergerfs uses **policies** to decide where new files and directories are created. The option `category.create=XXX` controls this behavior.
 
-**Default in this guide**: `pfrd` (recommended for media/NAS + SnapRAID)
-- **pfrd** = path-preserving + percentage-free random distribution
-    - Preserves the full directory path on the chosen disk when possible.
-    - Distributes new top-level folders across disks using a weighted random algorithm based on free space percentage.
-    - Good balance of directory structure + even disk usage. Ideal for movie/TV libraries.
+**Default in this guide**: `epmfs` (recommended for media/NAS + SnapRAID)
+- **epmfs** = existing-path most-free-space
+    - Strongly preserves the full directory path when possible.
+    - When the path exists on multiple disks, picks the one with the **most** free space.
+    - Falls back to most-free-space when the path doesn’t exist yet.
+    - Excellent balance of keeping related files together while spreading usage evenly.
 
 **Common alternative policies** (change `category.create=XXX` in the fstab line and run `sudo mount -a`):
-- **ff** (first-found): Fastest. Creates on the first disk with enough space. Can fill one disk quickly.
-- **mfs** (most-free-space): Always creates on the disk with the most free space. Simple and even usage.
-- **epmfs** (existing-path most-free-space): Tries to keep files in the same path as existing data; falls back to most-free-space.
-- **eplfs** (existing-path least-free-space): Similar to epmfs but prefers the disk with least free space (for filling disks evenly).
+- **eplfs** (existing-path least-free-space): Same path-preserving behavior but prefers the disk with the **least** free space (fills disks more sequentially).
+- **pfrd** (percentage-free random distribution): Ignores existing paths; spreads new folders randomly weighted by % free space.
+- **ff** (first-found): Fastest. Creates on the first disk with enough space.
+- **mfs** (most-free-space): Always creates on the disk with the most free space.
 - **rand** (random): Pure random selection among disks with enough space.
 - **lfs** / **lus** (least-free-space / least-used-space): Useful for specific balancing needs.
 
