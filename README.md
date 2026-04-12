@@ -26,9 +26,11 @@ See the official Zettlab documentation for third-party OS flashing:
 
 - **[Installation Guide](ubuntu-installation.md)** – Ubuntu Server 26.04 (recommended, headless via SSH)
 - **[Fan Control Guide](fan-control.md)**
+- **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)** – Recommended for pooling the 5 data disks + parity
 - **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
 
-**Recommended Workflow**  
-1. Start with **[Installation Guide](ubuntu-installation.md)**.  
-2. Immediately follow **[Fan Control Guide](fan-control.md)**.  
-3. Choose the LCD dashboard that matches your installation type.
+**Recommended Workflow**
+1. Start with **[Installation Guide](ubuntu-installation.md)**.
+2. Immediately follow **[Fan Control Guide](fan-control.md)**.
+3. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)** (critical for data protection).
+4. Set up LCD dashboard
