@@ -5,7 +5,7 @@
 - HDMI output runs at **full native resolution** (1080p or 4K) — completely unaffected
 - Uses a dedicated low-privilege user (`nasuser`) with auto-login so the dashboard starts immediately after boot
 - Your personal account stays fully password-protected
-- Lightweight systemd service + Conky (the most reliable method on this hardware)
+- Uses GNOME autostart + wrapper script
 
 ## Prerequisites
 - Ubuntu **Desktop Minimal** 26.04 installed and booted
@@ -76,6 +76,7 @@ conky.config = {
     update_interval = 2,
     use_xft = true,
     xftalpha = 0.9,
+    xinerama_head = 0,   -- Force Conky to the primary monitor (LCD)
 }
 
 conky.text = [[
@@ -95,34 +96,47 @@ Storage (/tank): ${fs_free /tank} free of ${fs_size /tank}
 
 Save & exit.
 
-### Step 5: Create the Systemd Service
+### Step 5: Create the LCD Startup Wrapper Script
 ```bash
-sudo nano /etc/systemd/system/zettlab-lcd.service
+sudo -u nasuser nano /home/nasuser/.config/lcd-startup.sh
 ```
 
-Paste:
+Paste this:
+
+```bash
+#!/bin/bash
+sleep 10
+# Make LCD primary so Conky stays on it
+xrandr --output eDP-1 --mode 640x172 --primary --right-of HDMI-A-1
+# Start Conky on the LCD
+conky -c /home/nasuser/.config/conky/zettlab-lcd.conf --display=:0 &
+```
+
+Save & exit, then make executable:
+```bash
+sudo -u nasuser chmod +x /home/nasuser/.config/lcd-startup.sh
+```
+
+### Step 6: Create GNOME Autostart Entry
+```bash
+sudo -u nasuser nano /home/nasuser/.config/autostart/zettlab-lcd.desktop
+```
+
+Paste this:
 
 ```ini
-[Unit]
-Description=Zettlab Front LCD Custom Status Display
-After=multi-user.target network-online.target graphical.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=nasuser
-Environment="DISPLAY=:0"
-ExecStartPre=/usr/bin/xrandr --output eDP-1 --mode 640x172 --right-of HDMI-A-1
-ExecStart=/usr/bin/conky -c /home/nasuser/.config/conky/zettlab-lcd.conf --display=:0
-Restart=always
-RestartSec=3
-Nice=19
-
-[Install]
-WantedBy=multi-user.target
+[Desktop Entry]
+Type=Application
+Name=Zettlab LCD Dashboard
+Exec=/home/nasuser/.config/lcd-startup.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
 ```
 
-### Step 6: Enable Auto-Login for `nasuser` (so dashboard starts immediately)
+Save & exit.
+
+### Step 7: Force Xorg Session (required for xrandr)
 ```bash
 sudo nano /etc/gdm3/custom.conf
 ```
@@ -133,14 +147,13 @@ Set the `[daemon]` section to:
 [daemon]
 AutomaticLoginEnable=true
 AutomaticLogin=nasuser
+WaylandEnable=false
 ```
 
 Save & exit.
 
-### Step 7: Activate Everything
+### Step 8: Activate Everything
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now zettlab-lcd.service
 sudo systemctl restart gdm3
 ```
 
@@ -151,14 +164,21 @@ sudo reboot
 
 ### Quick Management Commands
 ```bash
-sudo systemctl restart zettlab-lcd.service
-journalctl -u zettlab-lcd.service -f
-xrandr --output eDP-1 --mode 640x172   # emergency LCD fix
+# Restart dashboard manually (after login as nasuser)
+sudo -u nasuser /home/nasuser/.config/lcd-startup.sh
+
+# Check if Conky is running
+ps -u nasuser | grep conky
+
+# Emergency LCD fix (run as nasuser)
+xrandr --output eDP-1 --mode 640x172 --primary --right-of HDMI-A-1
 ```
 
 ## Troubleshooting
-- LCD wrong size/orientation → Run `xrandr --output eDP-1 --mode 640x172`
+- LCD still blank or wrong size → Run `xrandr --output eDP-1 --mode 640x172 --primary --right-of HDMI-A-1` as `nasuser`
+- Conky appears on HDMI instead → Check that `xinerama_head = 0` is in the Conky config and `--primary` is used in the wrapper
 - No HDD temperature → `sudo usermod -aG disk nasuser` and reboot
 - Wrong HDMI name → Run `xrandr | grep connected` after login
+- Session still on Wayland → Double-check `WaylandEnable=false` and reboot
 
-This is now the **stable, community-tested** setup for the Zettlab D6/D8 Ultra. HDMI stays perfect, LCD shows the dashboard immediately after boot, and your personal account remains secure.
+This is the **stable, community-tested** setup for the Zettlab D6/D8 Ultra after all kernel-level workarounds failed. HDMI stays perfect, the LCD shows the dashboard immediately after boot, and your personal account remains secure.
