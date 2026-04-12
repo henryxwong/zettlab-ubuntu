@@ -131,6 +131,31 @@ sudo mount -a
 ls /mnt/pool
 ```
 
+### Mergerfs Policy Reference (Different `category.create` types)
+mergerfs uses **policies** to decide where new files and directories are created. The option `category.create=XXX` controls this behavior.
+
+**Default in this guide**: `pfrd` (recommended for media/NAS + SnapRAID)
+- **pfrd** = path-preserving + percentage-free random distribution
+    - Preserves the full directory path on the chosen disk when possible.
+    - Distributes new top-level folders across disks using a weighted random algorithm based on free space percentage.
+    - Good balance of directory structure + even disk usage. Ideal for movie/TV libraries.
+
+**Common alternative policies** (change `category.create=XXX` in the fstab line and run `sudo mount -a`):
+- **ff** (first-found): Fastest. Creates on the first disk with enough space. Can fill one disk quickly.
+- **mfs** (most-free-space): Always creates on the disk with the most free space. Simple and even usage.
+- **epmfs** (existing-path most-free-space): Tries to keep files in the same path as existing data; falls back to most-free-space.
+- **eplfs** (existing-path least-free-space): Similar to epmfs but prefers the disk with least free space (for filling disks evenly).
+- **rand** (random): Pure random selection among disks with enough space.
+- **lfs** / **lus** (least-free-space / least-used-space): Useful for specific balancing needs.
+
+To change the policy later:
+1. Edit the mergerfs line in `/etc/fstab`.
+2. Run `sudo systemctl daemon-reload && sudo mount -a`.
+3. Existing files are unaffected — only new creations follow the new policy.
+
+For full policy list and details see the official mergerfs documentation:  
+https://github.com/trapexit/mergerfs#policy-descriptions
+
 ## Step 5: Configure SnapRAID
 
 ```bash
