@@ -4,7 +4,7 @@
 This document captures what was implemented on this NAS to expose fan telemetry and control the fans with custom temperature-based services on Ubuntu.
 
 The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.  
-**This guide now fully supports both D6 (6-bay) and D8 (8-bay) variants.**
+**This guide fully supports both D6 (6-bay) and D8 (8-bay) variants.**
 
 ## What Is Implemented
 1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
@@ -50,15 +50,12 @@ On this system:
 - HDD fans are driven from SATA SMART temperatures by a separate service
 
 ## Important Paths
-- Kernel module source: `/usr/src/zettlab-d8-fans-0.0.1`
-- CPU fan controller script: `/usr/local/sbin/cpu-fan-curve.sh`
-- CPU fan controller service: `/etc/systemd/system/cpu-fan-curve.service`
-- HDD fan controller script: `/usr/local/sbin/hdd-fan-curve.sh`
-- HDD fan controller service: `/etc/systemd/system/hdd-fan-curve.service`
-- Runtime state file: `/run/cpu-fan-curve.state`
-- HDD runtime state file: `/run/hdd-fan-curve.state`
-- Zettlab hwmon node: `/sys/class/hwmon/hwmon8`
-- CPU package temp input: `/sys/class/hwmon/hwmon7/temp1_input`
+The scripts use **dynamic hwmon discovery** by device name.  
+This ensures compatibility across D6/D8 hardware and different boot configurations.
+
+- Zettlab fan controller: discovered as `zettlab_d8_fans`
+- CPU package temperature: discovered as `coretemp`
+- Runtime state files: `/run/cpu-fan-curve.state` and `/run/hdd-fan-curve.state`
 
 ## Optional: Netdata Setup
 Netdata is **optional** — skip this section if you only want basic fan control.
@@ -99,7 +96,7 @@ echo zettlab_d8_fans | sudo tee /etc/modules-load.d/zettlab_d8_fans.conf
 ### Verifying The Module
 ```bash
 lsmod | grep zettlab_d8_fans
-cat /sys/class/hwmon/hwmon*/name
+for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && echo "$d: $(cat "$d/name")"; done
 sensors
 ```
 
@@ -137,9 +134,26 @@ File: `/usr/local/sbin/cpu-fan-curve.sh`
 #!/bin/bash
 set -euo pipefail
 
-TEMP_INPUT="/sys/class/hwmon/hwmon7/temp1_input"
-PWM_ENABLE="/sys/class/hwmon/hwmon8/pwm3_enable"
-PWM_OUTPUT="/sys/class/hwmon/hwmon8/pwm3"
+# === Dynamic hwmon discovery ===
+find_hwmon_by_name() {
+    local target_name="$1"
+    for dir in /sys/class/hwmon/hwmon*; do
+        if [[ -f "$dir/name" ]] && [[ "$(cat "$dir/name" 2>/dev/null)" == "$target_name" ]]; then
+            echo "$dir"
+            return 0
+        fi
+    done
+    echo "ERROR: Could not find hwmon device with name '$target_name'. Is the zettlab_d8_fans module loaded?" >&2
+    return 1
+}
+
+ZETTLAB_HWMON=$(find_hwmon_by_name "zettlab_d8_fans") || exit 1
+CPU_HWMON=$(find_hwmon_by_name "coretemp") || exit 1
+
+TEMP_INPUT="$CPU_HWMON/temp1_input"
+PWM_ENABLE="$ZETTLAB_HWMON/pwm3_enable"
+PWM_OUTPUT="$ZETTLAB_HWMON/pwm3"
+
 STATE_FILE="/run/cpu-fan-curve.state"
 SLEEP_SECS=2
 HYSTERESIS_C=2
@@ -261,25 +275,6 @@ Make executable:
 sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
 ```
 
-## CPU Fan systemd Service
-
-File: `/etc/systemd/system/cpu-fan-curve.service`
-
-```ini
-[Unit]
-Description=CPU fan control curve for Zettlab NAS
-After=multi-user.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/sbin/cpu-fan-curve.sh
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=multi-user.target
-```
-
 ## HDD Fan Control Design (D6 + D8 Support)
 
 The HDD fan controller **automatically detects all existing SATA drives** (sda–sdh).  
@@ -290,13 +285,28 @@ This supports both:
 If a drive/bay is empty or does not exist, it is skipped gracefully.  
 If no SATA drives are detected at all, the service safely falls back to `SAFE_PWM`.
 
-## Exact Script Code – HDD Fan (Updated for D6/D8)
+## Exact Script Code – HDD Fan
 
 File: `/usr/local/sbin/hdd-fan-curve.sh`
 
 ```bash
 #!/bin/bash
 set -euo pipefail
+
+# === Dynamic hwmon discovery ===
+find_hwmon_by_name() {
+    local target_name="$1"
+    for dir in /sys/class/hwmon/hwmon*; do
+        if [[ -f "$dir/name" ]] && [[ "$(cat "$dir/name" 2>/dev/null)" == "$target_name" ]]; then
+            echo "$dir"
+            return 0
+        fi
+    done
+    echo "ERROR: Could not find hwmon device with name '$target_name'. Is the zettlab_d8_fans module loaded?" >&2
+    return 1
+}
+
+ZETTLAB_HWMON=$(find_hwmon_by_name "zettlab_d8_fans") || exit 1
 
 # Dynamically detect all existing SATA drives (supports D6 + D8)
 DRIVES=()
@@ -306,7 +316,7 @@ for dev in /dev/sd[a-h]; do
     fi
 done
 
-PWM_OUTPUTS=("/sys/class/hwmon/hwmon8/pwm1" "/sys/class/hwmon/hwmon8/pwm2")
+PWM_OUTPUTS=("$ZETTLAB_HWMON/pwm1" "$ZETTLAB_HWMON/pwm2")
 STATE_FILE="/run/hdd-fan-curve.state"
 SLEEP_SECS=20
 HYSTERESIS_C=1
@@ -444,6 +454,25 @@ Make executable:
 sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
 ```
 
+## CPU Fan systemd Service
+
+File: `/etc/systemd/system/cpu-fan-curve.service`
+
+```ini
+[Unit]
+Description=CPU fan control curve for Zettlab NAS
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/cpu-fan-curve.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## HDD Fan systemd Service
 
 File: `/etc/systemd/system/hdd-fan-curve.service`
@@ -475,6 +504,7 @@ Check status:
 ```bash
 systemctl status cpu-fan-curve.service
 systemctl status hdd-fan-curve.service
+journalctl -u cpu-fan-curve.service -f
 journalctl -u hdd-fan-curve.service -f
 ```
 
@@ -484,23 +514,22 @@ journalctl -u hdd-fan-curve.service -f
 
 ```bash
 # Read current values
-cat /sys/class/hwmon/hwmon7/temp1_input
-cat /sys/class/hwmon/hwmon8/pwm3_enable
-cat /sys/class/hwmon/hwmon8/pwm3
-cat /sys/class/hwmon/hwmon8/fan3_input
-
-# Force manual mode (example)
-echo 1 | sudo tee /sys/class/hwmon/hwmon8/pwm3_enable
-
-# Set PWM manually (example)
-echo 120 | sudo tee /sys/class/hwmon/hwmon8/pwm3
+for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && echo "$d: $(cat "$d/name")"; done
+cat /sys/class/hwmon/hwmon*/temp1_input 2>/dev/null | head -n 5
+cat /sys/class/hwmon/hwmon*/pwm[1-3] 2>/dev/null
 ```
 
-## Recommended Sharing Notes
+**Manual override example:**
+```bash
+ZETTLAB=$(for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && [[ "$(cat "$d/name")" == "zettlab_d8_fans" ]] && echo "$d"; done)
+echo 1 | sudo tee "$ZETTLAB/pwm3_enable"
+echo 120 | sudo tee "$ZETTLAB/pwm3"
+```
+
+## Recommended Notes
 1. Install the Zettlab fan module through DKMS
 2. Verify fans appear in `hwmon`
 3. Install `lm-sensors`
 4. (Optional) Install Netdata if you want remote monitoring
 5. Do **not** rely on stock `fancontrol`
-6. Use custom scripts that only write valid `0-183` PWM values
-7. The HDD script now automatically supports both D6 and D8
+6. The HDD script automatically supports both D6 and D8
