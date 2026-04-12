@@ -1,17 +1,30 @@
 # Fan Control Guide for Zettlab D6/D8 Ultra on Ubuntu 26.04
 
 ## Scope
-This document captures what was implemented on this NAS to expose fan telemetry, monitor it with Netdata, and control the CPU fan with a custom temperature-based service on Ubuntu.
+This document captures what was implemented on this NAS to expose fan telemetry and control the fans with custom temperature-based services on Ubuntu.
 
 The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
 
 ## What Is Implemented
 1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
 2. `lm-sensors` is installed for local sensor visibility.
-3. Netdata is installed and claimed to Netdata Cloud for monitoring.
+3. **(Optional)** Netdata is installed for monitoring (graphs + Netdata Cloud).
 4. A custom `systemd` service controls the CPU fan in manual mode based on CPU package temperature.
 5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature.
-6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver as shipped on Ubuntu.
+6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver.
+
+## Package Installation (Required First Step)
+Run these commands **before** anything else:
+
+```bash
+sudo apt update
+
+# Install required packages
+sudo apt install dkms build-essential git smartmontools lm-sensors -y
+
+# Remove incompatible stock fancontrol package
+sudo apt remove --purge fancontrol -y
+```
 
 ## Why A Custom Service Was Needed
 The Zettlab fan driver accepts PWM values in the range `0-183`.
@@ -46,35 +59,32 @@ On this system:
 - Zettlab hwmon node: `/sys/class/hwmon/hwmon8`
 - CPU package temp input: `/sys/class/hwmon/hwmon7/temp1_input`
 
-## Installed Packages
-- `dkms`
-- `build-essential`
-- `lm-sensors`
-- `smartmontools`
-- Netdata static install under `/opt/netdata`
+## Optional: Netdata Setup
+Netdata is **optional** — skip this section if you only want basic fan control.
 
-Removed:
+```bash
+# Optional: Install Netdata (static method works well on Ubuntu 26.04)
+sudo bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
+```
 
-- `fancontrol`
+Netdata status can be checked with:
+
+```bash
+systemctl status netdata
+curl -fsS http://127.0.0.1:19999/api/v1/info
+```
+
+Netdata will automatically discover the Zettlab fan sensors.
 
 ## Kernel Module Setup
 
 ### Prerequisites
 - Secure Boot disabled
 - kernel headers present for the running kernel
-- `dkms` installed
+- `dkms` installed (already done in the package step above)
 
 ### DKMS Install Flow
-Source files were placed in:
-
 ```bash
-/usr/src/zettlab-d8-fans-0.0.1
-```
-
-Then installed with:
-
-```bash
-sudo apt install dkms build-essential git smartmontools lm-sensors -y
 git clone https://github.com/haveacry/zettlab-d8-fans.git
 cd zettlab-d8-fans
 
@@ -106,35 +116,8 @@ Expected `hwmon` name:
 zettlab_d8_fans
 ```
 
-## Netdata Setup
-Netdata native packages were not available for Ubuntu 26.04 `resolute`, so the static install path was used.
-
-Installed using the Netdata kickstart script with:
-
-- `--stable-channel`
-- `--install-type static`
-- cloud claim parameters
-
-Netdata status can be checked with:
-
-```bash
-systemctl status netdata
-curl -fsS http://127.0.0.1:19999/api/v1/info
-```
-
-Netdata successfully discovered the Zettlab fan sensors and exposed the CPU fan RPM chart.
-
 ## lm-sensors Notes
 `lm-sensors` works without extra configuration.
-
-The optional docs snippet below was not added because it only remaps PWM display values and is not required for monitoring:
-
-```conf
-chip "zettlab_d8_fans-*"
-    compute pwm1 (@ * 200 / 183), (@ * 183 / 200)
-    compute pwm2 (@ * 200 / 183), (@ * 183 / 200)
-    compute pwm3 (@ * 200 / 183), (@ * 183 / 200)
-```
 
 Useful command:
 
@@ -163,11 +146,11 @@ Because of that, the implemented approach is:
 ### Active Curve
 Current logic:
 
-- `<48 C` -> `100`
-- `48-55 C` -> `120`
-- `56-63 C` -> `140`
-- `64-71 C` -> `160`
-- `>=72 C` -> `183`
+- `<48 C` → `100`
+- `48-55 C` → `120`
+- `56-63 C` → `140`
+- `64-71 C` → `160`
+- `>=72 C` → `183`
 
 Top-end hysteresis:
 
@@ -362,11 +345,11 @@ This NAS exposes reliable SMART temperatures through `smartctl`, so the HDD fan 
 ### HDD Fan Curve
 Current logic:
 
-- `<35 C` -> `80`
-- `35-39 C` -> `100`
-- `40-42 C` -> `120`
-- `43-45 C` -> `140`
-- `>=46 C` -> `183`
+- `<35 C` → `80`
+- `35-39 C` → `100`
+- `40-42 C` → `120`
+- `43-45 C` → `140`
+- `>=46 C` → `183`
 
 Top-end hysteresis:
 
@@ -640,7 +623,7 @@ If someone wants to reproduce this on a similar NAS:
 1. install the Zettlab fan module through DKMS
 2. verify fans appear in `hwmon`
 3. install `lm-sensors`
-4. install Netdata if remote monitoring is desired
+4. (optional) install Netdata if remote monitoring is desired
 5. do not rely on stock `fancontrol` with this driver
 6. use a custom script that only writes valid PWM values in `0-183`
 7. test both fan behavior and throttle counters under sustained CPU load
