@@ -3,14 +3,15 @@
 ## Scope
 This document captures what was implemented on this NAS to expose fan telemetry and control the fans with custom temperature-based services on Ubuntu.
 
-The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.
+The target hardware is a Zettlab D8 Ultra class NAS using the `zettlab_d8_fans` kernel module.  
+**This guide now fully supports both D6 (6-bay) and D8 (8-bay) variants.**
 
 ## What Is Implemented
 1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
 2. `lm-sensors` is installed for local sensor visibility.
 3. **(Optional)** Netdata is installed for monitoring (graphs + Netdata Cloud).
 4. A custom `systemd` service controls the CPU fan in manual mode based on CPU package temperature.
-5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature.
+5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature (works on both D6 and D8).
 6. The stock `fancontrol` package was tested and removed because it is not compatible with this driver.
 
 ## Package Installation (Required First Step)
@@ -279,11 +280,17 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-## HDD Fan Control Design
+## HDD Fan Control Design (D6 + D8 Support)
 
-The HDD fan service uses the highest SMART temperature from the four SATA drives (`/dev/sda` to `/dev/sdd`).
+The HDD fan controller **automatically detects all existing SATA drives** (sda–sdh).  
+This supports both:
+- D6 Ultra (up to 6 bays)
+- D8 Ultra (up to 8 bays)
 
-## Exact Script Code – HDD Fan
+If a drive/bay is empty or does not exist, it is skipped gracefully.  
+If no SATA drives are detected at all, the service safely falls back to `SAFE_PWM`.
+
+## Exact Script Code – HDD Fan (Updated for D6/D8)
 
 File: `/usr/local/sbin/hdd-fan-curve.sh`
 
@@ -291,7 +298,14 @@ File: `/usr/local/sbin/hdd-fan-curve.sh`
 #!/bin/bash
 set -euo pipefail
 
-DRIVES=(/dev/sda /dev/sdb /dev/sdc /dev/sdd)
+# Dynamically detect all existing SATA drives (supports D6 + D8)
+DRIVES=()
+for dev in /dev/sd[a-h]; do
+    if [[ -b "$dev" ]]; then
+        DRIVES+=("$dev")
+    fi
+done
+
 PWM_OUTPUTS=("/sys/class/hwmon/hwmon8/pwm1" "/sys/class/hwmon/hwmon8/pwm2")
 STATE_FILE="/run/hdd-fan-curve.state"
 SLEEP_SECS=20
@@ -461,6 +475,7 @@ Check status:
 ```bash
 systemctl status cpu-fan-curve.service
 systemctl status hdd-fan-curve.service
+journalctl -u hdd-fan-curve.service -f
 ```
 
 ## Useful Runtime Commands
@@ -488,4 +503,4 @@ echo 120 | sudo tee /sys/class/hwmon/hwmon8/pwm3
 4. (Optional) Install Netdata if you want remote monitoring
 5. Do **not** rely on stock `fancontrol`
 6. Use custom scripts that only write valid `0-183` PWM values
-7. Test under sustained CPU load
+7. The HDD script now automatically supports both D6 and D8
