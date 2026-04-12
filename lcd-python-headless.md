@@ -24,7 +24,7 @@ sudo nano /etc/default/grub
 Replace the `GRUB_CMDLINE_LINUX_DEFAULT` line with:
 
 ```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:640x172M,HDMI-A-1:1920x1080@60M"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:640x172M,HDMI-A-1:1920x1080@60M fbcon=rotate:1"
 ```
 
 **Adjustments you may need:**
