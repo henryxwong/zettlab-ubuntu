@@ -53,7 +53,7 @@ sudo apt install python3-pil python3-psutil smartmontools -y
 ### 5. Step 3: Identify the Correct Framebuffer
 ```bash
 ls /dev/fb*
-cat /sys/class/drm/card0-eDP-1/status
+cat /sys/class/drm/card1-eDP-1/status
 ```
 
 Most Zettlab units use `/dev/fb0`. If yours is different, change `FB_DEV` in the script below.
