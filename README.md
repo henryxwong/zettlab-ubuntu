@@ -6,10 +6,6 @@ This is a **community-driven total rewrite** of the original guides. All informa
 **Acknowledgement**  
 This guide was made possible with detailed information and testing shared by **Speedster** and **Daisan** on the Zettlab Discord.
 
-**Official Reference**  
-See the official Zettlab documentation for third-party OS flashing:  
-[Third-party system flashing](https://wiki.zettlab.com/guide/FAQ/Third-party%20system%20flashing.html)
-
 ## Hardware Specifications
 - **CPU**: Intel Core Ultra 5 125H (PL1/PL2 hard-locked to **45 W / 93 W** in the BIOS — cannot be changed even after installing Ubuntu)
 - **Front LCD**: 3.49-inch, 640×172 resolution, connected as `eDP-1`

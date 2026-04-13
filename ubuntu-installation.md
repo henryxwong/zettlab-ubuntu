@@ -4,12 +4,6 @@
 Before proceeding, read the official Zettlab documentation:  
 [Third-party system flashing](https://wiki.zettlab.com/guide/FAQ/Third-party%20system%20flashing.html)
 
-**Disclaimer**  
-This is a community-driven guide still in draft status. Use at your own risk.
-
-**Acknowledgement**  
-This guide was made possible with detailed information and testing shared by **Speedster** and **Daisan** on the Zettlab Discord.
-
 ## Hardware Note
 The Zettlab D6/D8 Ultra has an internal M.2 NVMe system drive plus support for additional M.2 slots. Installing Ubuntu to a **secondary NVMe drive** is strongly recommended so you can keep the original ZettOS installation intact as a fallback.
 
