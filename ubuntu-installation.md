@@ -57,9 +57,3 @@ sudo apt install lm-sensors smartmontools curl git -y
 - **Front LCD**: Connected as `eDP-1` (disabled during live boot with the parameter above)
 - **Networking (RTL8127)**: Works out-of-the-box
 - **CPU**: Intel Core Ultra 5 125H – PL1/PL2 locked at 45 W / 93 W
-
-## Next Steps
-1. Immediately follow the **[Fan Control Guide](fan-control.md)** (install the DKMS fan module + the two custom fan-curve services).
-2. Then choose your LCD dashboard:
-   - **[LCD Dashboard – Headless Server (Recommended)](lcd-python-headless.md)**
-   - **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
