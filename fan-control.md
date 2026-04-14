@@ -1,55 +1,44 @@
 # Fan Control Guide for Zettlab D6/D8 Ultra on Ubuntu 26.04
 
 ## Scope
-This document captures the complete fan control implementation for the Zettlab D6/D8 Ultra NAS on Ubuntu 26.04. It exposes fan telemetry via the community `zettlab_d8_fans` kernel module and uses custom systemd services for temperature-based control.
+This document provides the complete fan control implementation for the Zettlab D6 and D8 Ultra NAS running Ubuntu 26.04. It uses the community `zettlab_d8_fans` kernel module to expose fan telemetry and implements custom systemd services for fully dynamic, temperature-adaptive control.
 
-This guide fully supports both D6 (6-bay) and D8 (8-bay) variants.
+This guide supports both the D6 (6-bay) and D8 (8-bay) variants.
 
 ## Ideal Operating Temperatures
-The updated fan curves are designed to maintain these targets for maximum longevity and silence:
+The control logic is designed to maintain these targets for best longevity and silence:
 
-- **CPU Package Temperature** (coretemp): 40–50 °C at idle, under 65 °C under typical load.
-- **HDD Temperatures** (SMART): Maximum of any drive under 40 °C.
+- **CPU Package Temperature** (coretemp sensor): 42–50 °C at idle, maximum 65 °C under typical load.
+- **HDD Temperatures** (SMART): Maximum of any drive ≤ 38 °C (ideally 32–37 °C).
 
-These values balance cooling needs with minimal fan noise. The CPU is Intel Core Ultra 5 125H (PL1/PL2 locked at 45 W / 93 W). NAS HDDs run best and last longest in the 30–40 °C range.
+## Critical Safety Notes
+- Fans have a physical minimum effective speed. PWM values below ~60–80 can cause stalling.
+- Significant thermal lag exists (30–120+ seconds). The controller uses smoothing and conservative gains to prevent oscillation.
+- All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
+- If any temperature sensor fails to read, the system immediately falls back to a safe high PWM level.
+- These scripts replace the stock `fancontrol` package, which is incompatible with the 0–183 PWM range of the Zettlab driver.
 
 ## What Is Implemented
-1. A DKMS-installed kernel module exposes the NAS fans in `hwmon`.
-2. `lm-sensors` is installed for local sensor visibility.
-3. **(Optional)** Netdata is installed for monitoring (graphs + Netdata Cloud).
-4. A custom `systemd` service controls the CPU fan in manual mode based on CPU package temperature (with smoothing).
-5. A second custom `systemd` service controls the HDD fans from the highest SATA SMART temperature (supports both D6 and D8, with smoothing).
-6. The stock `fancontrol` package was removed because it is incompatible with this driver.
-
-## Why A Custom Service Was Needed
-The Zettlab fan driver accepts PWM values in the range `0-183`.
-
-Ubuntu's stock `fancontrol` tooling assumes a `0-255` style PWM range and fails during probing and startup.
-
-The custom service writes only valid `0-183` values and includes exponential moving average (EMA) smoothing to ignore short temperature spikes.
+1. DKMS-installed `zettlab_d8_fans` kernel module exposing fans in `hwmon`.
+2. `lm-sensors` for local sensor visibility.
+3. (Optional) Netdata for monitoring and graphs.
+4. Dynamic proportional controller for the CPU fan (manual mode) using EMA smoothing and configurable target temperature.
+5. Dynamic proportional controller for the HDD fans (both rear disk fans) based on the highest SATA SMART temperature. Automatically supports D6 and D8.
+6. All control uses dynamic hwmon discovery by device name for maximum compatibility.
 
 ## Fan Layout
 - `fan1`: rear disk fan 1
 - `fan2`: rear disk fan 2
 - `fan3`: CPU fan
 
-On this system:
-- Disk fans are manual only through this driver.
-- CPU auto mode (`pwm3_enable=2`) was unstable in testing and is not used.
-- CPU fan is kept in manual mode.
-- HDD fans are driven from SATA SMART temperatures by a separate service.
+Disk fans and CPU fan are kept in manual mode (`pwmX_enable=1`).
 
 ## Important Paths
-The scripts use **dynamic hwmon discovery** by device name.  
-This ensures compatibility across D6/D8 hardware and different boot configurations.
-
 - Zettlab fan controller: discovered as `zettlab_d8_fans`
 - CPU package temperature: discovered as `coretemp`
 - Runtime state files: `/run/cpu-fan-curve.state` and `/run/hdd-fan-curve.state`
 
 ## Optional: Netdata Setup
-Netdata is optional.
-
 ```bash
 sudo bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
 ```
@@ -88,8 +77,6 @@ for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && echo "$d: $(cat "$d/nam
 sensors
 ```
 
-Expected `hwmon` name: `zettlab_d8_fans`
-
 ## lm-sensors Notes
 `lm-sensors` works without extra configuration.
 
@@ -98,18 +85,10 @@ Useful command:
 sensors
 ```
 
-## Final CPU Fan Control Design
-CPU auto mode (`pwm3_enable=2`) was unstable. The custom service forces manual mode and uses a reliable temperature curve with EMA smoothing.
+## CPU Fan Control (Dynamic Proportional)
+The controller automatically calculates the minimum PWM required to keep the CPU near the target temperature. It uses exponential moving average (EMA) smoothing and includes hard safety minimums and full-speed emergency overrides.
 
-### Active Curve
-- `<45 °C` → `80`
-- `45-52 °C` → `100`
-- `53-59 °C` → `120`
-- `60-66 °C` → `140`
-- `67-73 °C` → `160`
-- `≥74 °C` → `183`
-
-Top-end hysteresis: stays at 183 until temperature drops below 70 °C.
+**All values at the top of the script are editable.**
 
 ### Exact Script Code – CPU Fan
 File: `/usr/local/sbin/cpu-fan-curve.sh`
@@ -118,7 +97,14 @@ File: `/usr/local/sbin/cpu-fan-curve.sh`
 #!/bin/bash
 set -euo pipefail
 
-# === Dynamic hwmon discovery ===
+# ================== USER-CONFIGURABLE SETTINGS ==================
+TARGET_CPU_C=45          # Ideal CPU temperature target (°C)
+MIN_SAFE_PWM=80          # Absolute minimum PWM (do not go lower or fans may stall)
+MAX_SAFE_TEMP_C=70       # Force full speed (183) if temperature exceeds this
+GAIN_TENTHS=40           # Proportional gain ×10 (40 = 4.0). Higher = more aggressive
+EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (25 = 0.25). Lower = slower response
+# ============================================================
+
 find_hwmon_by_name() {
     local target_name="$1"
     for dir in /sys/class/hwmon/hwmon*; do
@@ -140,10 +126,6 @@ PWM_OUTPUT="$ZETTLAB_HWMON/pwm3"
 
 STATE_FILE="/run/cpu-fan-curve.state"
 SLEEP_SECS=4
-HYSTERESIS_C=4
-SAFE_PWM=100
-FULL_SPEED_ON_C=74
-FULL_SPEED_OFF_C=70
 
 read_temp_c() {
     local temp_milli
@@ -151,37 +133,18 @@ read_temp_c() {
     printf '%d\n' "$((temp_milli / 1000))"
 }
 
-target_pwm_for_temp() {
-    local temp_c=$1
-    if (( temp_c >= FULL_SPEED_ON_C )); then
-        printf '183\n'
-    elif (( temp_c >= 67 )); then
-        printf '160\n'
-    elif (( temp_c >= 60 )); then
-        printf '140\n'
-    elif (( temp_c >= 53 )); then
-        printf '120\n'
-    elif (( temp_c >= 45 )); then
-        printf '100\n'
-    else
-        printf '80\n'
-    fi
-}
-
 read_state() {
     if [[ -r "$STATE_FILE" ]]; then
         source "$STATE_FILE"
     else
-        last_pwm=-1
-        last_temp=-1000
+        last_temp=0
     fi
 }
 
 write_state() {
     umask 022
     cat >"$STATE_FILE" <<EOF
-last_pwm=$1
-last_temp=$2
+last_temp=$1
 EOF
 }
 
@@ -192,70 +155,44 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp target_pwm
+    local temp_c smoothed_temp error pwm
 
     read_state
 
     while true; do
         if ! temp_c=$(read_temp_c); then
-            apply_pwm "$SAFE_PWM"
-            write_state "$SAFE_PWM" -1000
+            apply_pwm "$MIN_SAFE_PWM"
+            write_state 0
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        # Exponential moving average smoothing (75% previous, 25% new) to ignore short spikes
+        # EMA smoothing (integer math)
         if (( last_temp > 0 )); then
-            smoothed_temp=$(( (last_temp * 3 + temp_c) / 4 ))
+            smoothed_temp=$(( (last_temp * (100 - EMA_HUNDREDTHS) + temp_c * EMA_HUNDREDTHS) / 100 ))
         else
             smoothed_temp=$temp_c
         fi
 
-        target_pwm=$(target_pwm_for_temp "$smoothed_temp")
-
-        if (( last_pwm == -1 )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
-
-        if (( temp_c >= FULL_SPEED_ON_C && last_pwm < 183 )); then
+        # Emergency full speed override
+        if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
-            last_pwm=183
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
+            write_state "$smoothed_temp"
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        if (( last_pwm == 183 && temp_c >= FULL_SPEED_OFF_C )); then
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
+        # Proportional control (integer math)
+        error=$(( smoothed_temp - TARGET_CPU_C ))
+        pwm=$(( MIN_SAFE_PWM + (GAIN_TENTHS * error) / 10 ))
 
-        if (( target_pwm > last_pwm )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
+        # Clamp values
+        (( pwm < MIN_SAFE_PWM )) && pwm=$MIN_SAFE_PWM
+        (( pwm > 183 )) && pwm=183
 
-        if (( target_pwm < last_pwm && temp_c <= last_temp - HYSTERESIS_C )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
-
-        write_state "$last_pwm" "$last_temp"
+        apply_pwm "$pwm"
+        write_state "$smoothed_temp"
+        last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
 }
@@ -268,18 +205,10 @@ Make executable:
 sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
 ```
 
-## HDD Fan Control Design (D6 + D8 Support)
-The HDD fan controller automatically detects all existing SATA drives (sda–sdh). It supports both D6 Ultra and D8 Ultra. Empty bays are skipped gracefully. If no SATA drives are detected, it falls back safely to `SAFE_PWM`.
+## HDD Fan Control (Dynamic Proportional – D6 + D8 Support)
+The controller automatically detects all SATA drives (sda–sdh), reads the highest SMART temperature, and calculates the minimum PWM for both rear disk fans. Empty bays are ignored.
 
-### Active Curve
-- `<30 °C` → `60`
-- `30-34 °C` → `80`
-- `35-37 °C` → `100`
-- `38-40 °C` → `120`
-- `41-43 °C` → `140`
-- `≥44 °C` → `183`
-
-Top-end hysteresis: stays at 183 until temperature drops below 41 °C.
+**All values at the top of the script are editable.**
 
 ### Exact Script Code – HDD Fan
 File: `/usr/local/sbin/hdd-fan-curve.sh`
@@ -288,7 +217,14 @@ File: `/usr/local/sbin/hdd-fan-curve.sh`
 #!/bin/bash
 set -euo pipefail
 
-# === Dynamic hwmon discovery ===
+# ================== USER-CONFIGURABLE SETTINGS ==================
+TARGET_HDD_C=37          # Ideal maximum HDD temperature (°C)
+MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
+MAX_SAFE_TEMP_C=45       # Force full speed (183) if any drive exceeds this
+GAIN_TENTHS=25           # Proportional gain ×10 (25 = 2.5). Lower because HDDs react slower
+EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (25 = 0.25)
+# ============================================================
+
 find_hwmon_by_name() {
     local target_name="$1"
     for dir in /sys/class/hwmon/hwmon*; do
@@ -312,12 +248,9 @@ for dev in /dev/sd[a-h]; do
 done
 
 PWM_OUTPUTS=("$ZETTLAB_HWMON/pwm1" "$ZETTLAB_HWMON/pwm2")
+
 STATE_FILE="/run/hdd-fan-curve.state"
 SLEEP_SECS=20
-HYSTERESIS_C=3
-SAFE_PWM=80
-FULL_SPEED_ON_C=44
-FULL_SPEED_OFF_C=41
 
 read_drive_temp() {
     local drive=$1 temp
@@ -340,37 +273,18 @@ read_max_hdd_temp() {
     printf '%s\n' "$max_temp"
 }
 
-target_pwm_for_temp() {
-    local temp_c=$1
-    if (( temp_c >= FULL_SPEED_ON_C )); then
-        printf '183\n'
-    elif (( temp_c >= 41 )); then
-        printf '140\n'
-    elif (( temp_c >= 38 )); then
-        printf '120\n'
-    elif (( temp_c >= 35 )); then
-        printf '100\n'
-    elif (( temp_c >= 30 )); then
-        printf '80\n'
-    else
-        printf '60\n'
-    fi
-}
-
 read_state() {
     if [[ -r "$STATE_FILE" ]]; then
         source "$STATE_FILE"
     else
-        last_pwm=-1
-        last_temp=-1000
+        last_temp=0
     fi
 }
 
 write_state() {
     umask 022
     cat >"$STATE_FILE" <<EOF
-last_pwm=$1
-last_temp=$2
+last_temp=$1
 EOF
 }
 
@@ -382,70 +296,44 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp target_pwm
+    local temp_c smoothed_temp error pwm
 
     read_state
 
     while true; do
         if ! temp_c=$(read_max_hdd_temp); then
-            apply_pwm "$SAFE_PWM"
-            write_state "$SAFE_PWM" -1000
+            apply_pwm "$MIN_SAFE_PWM"
+            write_state 0
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        # Exponential moving average smoothing (75% previous, 25% new) to ignore short spikes
+        # EMA smoothing (integer math)
         if (( last_temp > 0 )); then
-            smoothed_temp=$(( (last_temp * 3 + temp_c) / 4 ))
+            smoothed_temp=$(( (last_temp * (100 - EMA_HUNDREDTHS) + temp_c * EMA_HUNDREDTHS) / 100 ))
         else
             smoothed_temp=$temp_c
         fi
 
-        target_pwm=$(target_pwm_for_temp "$smoothed_temp")
-
-        if (( last_pwm == -1 )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
-
-        if (( temp_c >= FULL_SPEED_ON_C && last_pwm < 183 )); then
+        # Emergency full speed override
+        if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
-            last_pwm=183
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
+            write_state "$smoothed_temp"
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        if (( last_pwm == 183 && temp_c >= FULL_SPEED_OFF_C )); then
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
+        # Proportional control (integer math)
+        error=$(( smoothed_temp - TARGET_HDD_C ))
+        pwm=$(( MIN_SAFE_PWM + (GAIN_TENTHS * error) / 10 ))
 
-        if (( target_pwm > last_pwm )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
+        # Clamp values
+        (( pwm < MIN_SAFE_PWM )) && pwm=$MIN_SAFE_PWM
+        (( pwm > 183 )) && pwm=183
 
-        if (( target_pwm < last_pwm && temp_c <= last_temp - HYSTERESIS_C )); then
-            apply_pwm "$target_pwm"
-            last_pwm=$target_pwm
-            last_temp=$smoothed_temp
-            write_state "$last_pwm" "$last_temp"
-            sleep "$SLEEP_SECS"
-            continue
-        fi
-
-        write_state "$last_pwm" "$last_temp"
+        apply_pwm "$pwm"
+        write_state "$smoothed_temp"
+        last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
 }
@@ -511,8 +399,6 @@ journalctl -u hdd-fan-curve.service -f
 ```
 
 ## Useful Runtime Commands
-Always use `echo … | sudo tee …` when writing to sysfs files.
-
 ```bash
 # Read current values
 for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && echo "$d: $(cat "$d/name")"; done
@@ -528,10 +414,10 @@ echo 120 | sudo tee "$ZETTLAB/pwm3"
 ```
 
 ## Recommended Notes
-1. Install the Zettlab fan module through DKMS.
-2. Verify fans appear in `hwmon`.
+1. Install the Zettlab fan module through DKMS first.
+2. Verify fans appear in `hwmon` with `sensors`.
 3. Install `lm-sensors`.
 4. (Optional) Install Netdata for remote monitoring.
-5. Do **not** rely on stock `fancontrol`.
+5. Do not use the stock `fancontrol` package.
 6. The HDD script automatically supports both D6 and D8.
-7. Monitor with `sensors` and Netdata after installation.
+7. Monitor temperatures and PWM values with `sensors` and Netdata after installation. Adjust the TARGET, GAIN_TENTHS, and EMA_HUNDREDTHS values in the scripts if needed for your environment.
