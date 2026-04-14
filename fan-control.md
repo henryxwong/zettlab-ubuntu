@@ -33,11 +33,6 @@ The control logic is designed to maintain these targets for best longevity and s
 
 Disk fans and CPU fan are kept in manual mode (`pwmX_enable=1`).
 
-## Important Paths
-- Zettlab fan controller: discovered as `zettlab_d8_fans`
-- CPU package temperature: discovered as `coretemp`
-- Runtime state files: `/run/cpu-fan-curve.state` and `/run/hdd-fan-curve.state`
-
 ## Optional: Netdata Setup
 ```bash
 sudo bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --stable-channel --install-type static
@@ -124,28 +119,12 @@ TEMP_INPUT="$CPU_HWMON/temp1_input"
 PWM_ENABLE="$ZETTLAB_HWMON/pwm3_enable"
 PWM_OUTPUT="$ZETTLAB_HWMON/pwm3"
 
-STATE_FILE="/run/cpu-fan-curve.state"
 SLEEP_SECS=4
 
 read_temp_c() {
     local temp_milli
     temp_milli=$(<"$TEMP_INPUT") || return 1
     printf '%d\n' "$((temp_milli / 1000))"
-}
-
-read_state() {
-    if [[ -r "$STATE_FILE" ]]; then
-        source "$STATE_FILE"
-    else
-        last_temp=0
-    fi
-}
-
-write_state() {
-    umask 022
-    cat >"$STATE_FILE" <<EOF
-last_temp=$1
-EOF
 }
 
 apply_pwm() {
@@ -155,14 +134,11 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp error pwm
-
-    read_state
+    local temp_c smoothed_temp error pwm last_temp=0
 
     while true; do
         if ! temp_c=$(read_temp_c); then
             apply_pwm "$MIN_SAFE_PWM"
-            write_state 0
             sleep "$SLEEP_SECS"
             continue
         fi
@@ -177,7 +153,7 @@ main_loop() {
         # Emergency full speed override
         if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
-            write_state "$smoothed_temp"
+            last_temp=$smoothed_temp
             sleep "$SLEEP_SECS"
             continue
         fi
@@ -191,7 +167,6 @@ main_loop() {
         (( pwm > 183 )) && pwm=183
 
         apply_pwm "$pwm"
-        write_state "$smoothed_temp"
         last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
@@ -248,8 +223,6 @@ for dev in /dev/sd[a-h]; do
 done
 
 PWM_OUTPUTS=("$ZETTLAB_HWMON/pwm1" "$ZETTLAB_HWMON/pwm2")
-
-STATE_FILE="/run/hdd-fan-curve.state"
 SLEEP_SECS=20
 
 read_drive_temp() {
@@ -273,21 +246,6 @@ read_max_hdd_temp() {
     printf '%s\n' "$max_temp"
 }
 
-read_state() {
-    if [[ -r "$STATE_FILE" ]]; then
-        source "$STATE_FILE"
-    else
-        last_temp=0
-    fi
-}
-
-write_state() {
-    umask 022
-    cat >"$STATE_FILE" <<EOF
-last_temp=$1
-EOF
-}
-
 apply_pwm() {
     local pwm=$1 output
     for output in "${PWM_OUTPUTS[@]}"; do
@@ -296,14 +254,11 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp error pwm
-
-    read_state
+    local temp_c smoothed_temp error pwm last_temp=0
 
     while true; do
         if ! temp_c=$(read_max_hdd_temp); then
             apply_pwm "$MIN_SAFE_PWM"
-            write_state 0
             sleep "$SLEEP_SECS"
             continue
         fi
@@ -318,7 +273,7 @@ main_loop() {
         # Emergency full speed override
         if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
-            write_state "$smoothed_temp"
+            last_temp=$smoothed_temp
             sleep "$SLEEP_SECS"
             continue
         fi
@@ -332,7 +287,6 @@ main_loop() {
         (( pwm > 183 )) && pwm=183
 
         apply_pwm "$pwm"
-        write_state "$smoothed_temp"
         last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
