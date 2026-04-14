@@ -9,6 +9,7 @@ This guide was made possible with detailed information and testing shared by **S
 ## Hardware Specifications
 - **CPU**: Intel Core Ultra 5 125H (PL1/PL2 hard-locked to **45 W / 93 W** in the BIOS — cannot be changed even after installing Ubuntu)
 - **Front LCD**: 3.49-inch, 640×172 resolution, connected as `eDP-1`
+- **Audio**: Intel Meteor Lake integrated audio DSP (requires kernel parameter `snd_intel_dspcfg.dsp_driver=1` to use stable legacy HDA driver instead of failing SOF → fixes “Dummy Output”)
 - **Fans**: Controlled via community kernel module `zettlab_d8_fans` (PWM values strictly 0–183)
 - **Fan mapping**:
   - `fan1`: rear disk fan 1
@@ -22,10 +23,12 @@ This guide was made possible with detailed information and testing shared by **S
 - **[Installation Guide](ubuntu-installation.md)**
 - **[Fan Control Guide](fan-control.md)**
 - **[Intel Arc iGPU Drivers](intel-igpu.md)**
+- **[Audio Setup](audio-setup.md)**
 - **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**
 
 **Recommended Workflow**
 1. Start with **[Installation Guide](ubuntu-installation.md)**.
 2. Immediately follow **[Fan Control Guide](fan-control.md)**.
-3. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**
-4. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
+3. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**.
+4. Fix audio with **[Audio Setup](audio-setup.md)**.
+5. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
