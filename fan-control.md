@@ -193,10 +193,10 @@ File: `/usr/local/sbin/hdd-fan-curve.sh`
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_HDD_C=37          # Ideal maximum HDD temperature (°C)
+TARGET_HDD_C=39          # Ideal maximum HDD temperature (°C)
 MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=45       # Force full speed (183) if any drive exceeds this
-GAIN_TENTHS=25           # Proportional gain ×10 (25 = 2.5). Lower because HDDs react slower
+MAX_SAFE_TEMP_C=50       # Force full speed (183) if any drive exceeds this
+GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2). Lower because HDDs react slower
 EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (25 = 0.25)
 # ============================================================
 
