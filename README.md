@@ -1,38 +1,37 @@
 # Zettlab D6/D8 Ultra – Ubuntu 26.04 Guide
 
 **Disclaimer**  
-This is a **community-driven total rewrite** of the original guides. All information is still in **draft status** and has **not been fully verified** across every hardware revision or firmware version. Use at your own risk. Always perform a complete backup of the original ZettOS installation before proceeding.
+This is a community-driven total rewrite of the original guides. All information is still in draft status and has not been fully verified across every hardware revision or firmware version. Use at your own risk. Always perform a complete backup of the original ZettOS installation before proceeding.
 
 **Acknowledgement**  
-This guide was made possible with detailed information and testing shared by **Speedster** and **Daisan** on the Zettlab Discord.
+This guide was made possible with detailed information and testing shared by Speedster and Daisan on the Zettlab Discord.
 
 ## Hardware Specifications
-- **CPU**: Intel Core Ultra 5 125H (PL1/PL2 hard-locked to **45 W / 93 W** in the BIOS — cannot be changed even after installing Ubuntu)
-- **Front LCD**: 3.49-inch, 640×172 resolution, connected as `eDP-1`
-- **Audio**: Intel Meteor Lake integrated audio DSP (requires kernel parameter `snd_intel_dspcfg.dsp_driver=1` to use stable legacy HDA driver instead of failing SOF → fixes “Dummy Output”)
-- **Fans**: Controlled via community kernel module `zettlab_d8_fans` (PWM values strictly 0–183)
-- **Fan mapping**:
-  - `fan1`: rear disk fan 1
-  - `fan2`: rear disk fan 2
-  - `fan3`: CPU fan
-- **Networking**: **Dual 10GbE LAN Ports** (Realtek RTL8127 chipset, interfaces `enp88s0` + `enp89s0`)
-  - In-kernel `r8169` driver works out-of-the-box and fully supports 10 Gbps on Ubuntu 26.04
-  - Recommended: Install the official Realtek `r8127` DKMS driver for optimal performance and stability
-- **RGB / LED strip**: Detected as USB device (`lsusb`) but no driver available
+
+| Component | Details |
+|-----------|---------|
+| **CPU** | Intel Core Ultra 5 125H (PL1/PL2 hard-locked to **45 W / 93 W** in the BIOS) |
+| **Front LCD** | 3.49-inch, 640×172 resolution, connected as `eDP-1` |
+| **Audio** | Intel Meteor Lake integrated audio DSP (requires kernel parameter `snd_intel_dspcfg.dsp_driver=1` for stable HDA driver) |
+| **Fans** | Controlled via community kernel module `zettlab_d8_fans` (PWM values 0–183) |
+| **Fan Mapping** | `fan1`: rear disk fan 1, `fan2`: rear disk fan 2, `fan3`: CPU fan |
+| **Networking** | Dual 10GbE LAN Ports (Realtek RTL8127 chipset: `enp88s0` + `enp89s0`) |
+| **RGB / LED strip** | Detected as USB device but no driver available |
 
 ## Table of Contents
 
-- **[Installation Guide](ubuntu-installation.md)**
-- **[Realtek r8127 DKMS Driver](r8127-driver.md)**
-- **[Fan Control Guide](fan-control.md)**
-- **[Intel Arc iGPU Drivers](intel-igpu.md)**
-- **[Audio Setup](audio-setup.md)**
-- **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**
+| Guide | Description |
+|-------|-------------|
+| [Installation](ubuntu-installation.md) | Ubuntu 26.04 Server installation procedure |
+| [Network Driver](networking-r8127.md) | Realtek r8127 DKMS driver installation |
+| [Fan Control](hardware-fan-control.md) | Dynamic fan control via `zettlab_d8_fans` module |
+| [Graphics](graphics-iGPU.md) | Intel Arc iGPU driver installation |
+| [Audio](audio-HDA-driver.md) | Fixing "Dummy Output" via HDA driver configuration |
+| [Storage](storage-mergerfs-snapraid.md) | mergerfs + SnapRAID pool setup |
 
-**Recommended Workflow**
-1. Start with **[Installation Guide](ubuntu-installation.md)**.
-2. Install **[Realtek r8127 DKMS Driver](r8127-driver.md)**.
-3. Follow **[Fan Control Guide](fan-control.md)**.
-4. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**.
-5. Fix audio with **[Audio Setup](audio-setup.md)**.
-6. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
+## Prerequisites
+
+- HDMI display and USB keyboard (needed for BIOS and first boot)
+- USB flash drive ≥ 8 GB
+- Ubuntu Server 26.04 ISO
+- Recommended: Secondary NVMe SSD for Ubuntu installation (keeps ZettOS intact)
