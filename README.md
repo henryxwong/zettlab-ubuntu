@@ -15,12 +15,15 @@ This guide was made possible with detailed information and testing shared by **S
   - `fan1`: rear disk fan 1
   - `fan2`: rear disk fan 2
   - `fan3`: CPU fan
-- **Networking**: RTL8127 NICs (works out-of-the-box)
+- **Networking**: **Dual 10GbE LAN Ports** (Realtek RTL8127 chipset, interfaces `enp88s0` + `enp89s0`)
+  - In-kernel `r8169` driver works out-of-the-box and fully supports 10 Gbps on Ubuntu 26.04
+  - Recommended: Install the official Realtek `r8127` DKMS driver for optimal performance and stability
 - **RGB / LED strip**: Detected as USB device (`lsusb`) but no driver available
 
 ## Table of Contents
 
 - **[Installation Guide](ubuntu-installation.md)**
+- **[Realtek r8127 DKMS Driver](r8127-driver.md)**
 - **[Fan Control Guide](fan-control.md)**
 - **[Intel Arc iGPU Drivers](intel-igpu.md)**
 - **[Audio Setup](audio-setup.md)**
@@ -28,7 +31,8 @@ This guide was made possible with detailed information and testing shared by **S
 
 **Recommended Workflow**
 1. Start with **[Installation Guide](ubuntu-installation.md)**.
-2. Immediately follow **[Fan Control Guide](fan-control.md)**.
-3. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**.
-4. Fix audio with **[Audio Setup](audio-setup.md)**.
-5. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
+2. Install **[Realtek r8127 DKMS Driver](r8127-driver.md)**.
+3. Follow **[Fan Control Guide](fan-control.md)**.
+4. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**.
+5. Fix audio with **[Audio Setup](audio-setup.md)**.
+6. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
