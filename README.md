@@ -23,11 +23,9 @@ This guide was made possible with detailed information and testing shared by **S
 - **[Fan Control Guide](fan-control.md)**
 - **[Intel Arc iGPU Drivers](intel-igpu.md)**
 - **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**
-- **[LCD Dashboard – Minimal Desktop](lcd-conky-desktop.md)**
 
 **Recommended Workflow**
 1. Start with **[Installation Guide](ubuntu-installation.md)**.
 2. Immediately follow **[Fan Control Guide](fan-control.md)**.
 3. Set up the iGPU with **[Intel Arc iGPU Drivers](intel-igpu.md)**
 4. Set up your storage pool with **[Storage Pool – mergerfs + SnapRAID](mergefs-snapraid.md)**.
-5. Set up LCD dashboard.
