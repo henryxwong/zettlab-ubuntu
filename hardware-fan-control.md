@@ -8,6 +8,11 @@ This guide supports both D6 (6-bay) and D8 (8-bay) variants. The control logic m
 - **CPU Package Temperature**: Idle 42–50 °C, Maximum load ≤65 °C
 - **HDD Temperatures**: Idle 32–37 °C, Maximum load ≤38 °C
 
+The fan curves are designed to be:
+- Highly responsive when temperatures are rising (fast fan ramp-up)
+- Much less responsive when temperatures are falling (fans stay higher longer)
+- Protected against excessive PWM changes using **timer-based hysteresis** (after any upward PWM change, the fan speed is held for a minimum time before it is allowed to decrease)
+
 ## Fan Configuration
 
 | Fan | Target Component |
@@ -64,11 +69,15 @@ Save as `/usr/local/sbin/cpu-fan-curve.sh`:
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_CPU_C=45          # Ideal CPU temperature target (°C)
-MIN_SAFE_PWM=80          # Absolute minimum PWM
-MAX_SAFE_TEMP_C=70       # Force full speed if temperature exceeds this
-GAIN_TENTHS=40           # Proportional gain ×10 (higher = more aggressive)
-EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (lower = slower response)
+TARGET_CPU_C=51          # Ideal CPU temperature target (°C)
+MIN_SAFE_PWM=70          # Absolute minimum PWM (do not go lower or fans may stall)
+MAX_SAFE_TEMP_C=70       # Force full speed (183) if temperature exceeds this
+GAIN_TENTHS=40           # Proportional gain ×10 (40 = 4.0). Higher = more aggressive
+
+# Asymmetric response & timer-based anti-chatter
+RISE_EMA_HUNDREDTHS=45   # Faster response when temperature is rising
+FALL_EMA_HUNDREDTHS=12   # Much slower response when temperature is falling
+HOLD_TIME_AFTER_UP_SECS=120   # Minimum seconds to hold PWM after any upward change (prevents chatter)
 # ============================================================
 
 find_hwmon_by_name() {
@@ -105,18 +114,27 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp error pwm last_temp=0
+    local temp_c smoothed_temp error pwm last_temp=0 last_pwm last_change_time=0
+    last_pwm=$MIN_SAFE_PWM
 
     while true; do
         if ! temp_c=$(read_temp_c); then
             apply_pwm "$MIN_SAFE_PWM"
+            last_pwm=$MIN_SAFE_PWM
+            last_change_time=0
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        # EMA smoothing (integer math)
+        # Asymmetric EMA smoothing: fast on rise, slow on fall
         if (( last_temp > 0 )); then
-            smoothed_temp=$(( (last_temp * (100 - EMA_HUNDREDTHS) + temp_c * EMA_HUNDREDTHS) / 100 ))
+            local ema_hundredths
+            if (( temp_c > last_temp )); then
+                ema_hundredths=$RISE_EMA_HUNDREDTHS
+            else
+                ema_hundredths=$FALL_EMA_HUNDREDTHS
+            fi
+            smoothed_temp=$(( (last_temp * (100 - ema_hundredths) + temp_c * ema_hundredths) / 100 ))
         else
             smoothed_temp=$temp_c
         fi
@@ -124,6 +142,8 @@ main_loop() {
         # Emergency full speed override
         if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
+            last_pwm=183
+            last_change_time=$(date +%s)
             last_temp=$smoothed_temp
             sleep "$SLEEP_SECS"
             continue
@@ -137,7 +157,25 @@ main_loop() {
         (( pwm < MIN_SAFE_PWM )) && pwm=$MIN_SAFE_PWM
         (( pwm > 183 )) && pwm=183
 
-        apply_pwm "$pwm"
+        # Timer-based anti-chatter:
+        # - Always allow upward changes immediately
+        # - Only allow downward changes after HOLD_TIME_AFTER_UP_SECS has passed since last change
+        local current_time
+        current_time=$(date +%s)
+        local do_apply=false
+
+        if (( pwm > last_pwm )); then
+            do_apply=true
+        elif (( pwm < last_pwm )) && (( current_time - last_change_time >= HOLD_TIME_AFTER_UP_SECS )); then
+            do_apply=true
+        fi
+
+        if [[ "$do_apply" == true ]]; then
+            apply_pwm "$pwm"
+            last_pwm=$pwm
+            last_change_time=$current_time
+        fi
+
         last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
@@ -182,11 +220,15 @@ Save as `/usr/local/sbin/hdd-fan-curve.sh`:
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_HDD_C=39          # Ideal maximum HDD temperature (°C)
+TARGET_HDD_C=41          # Ideal maximum HDD temperature (°C)
 MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=50       # Force full speed if any drive exceeds this
-GAIN_TENTHS=22           # Proportional gain ×10 (lower because HDDs react slower)
-EMA_HUNDREDTHS=25        # EMA smoothing factor ×100
+MAX_SAFE_TEMP_C=55       # Force full speed (183) if any drive exceeds this
+GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2). Lower because HDDs react slower
+
+# Asymmetric response & timer-based anti-chatter
+RISE_EMA_HUNDREDTHS=35   # Faster response when temperature is rising
+FALL_EMA_HUNDREDTHS=10   # Much slower response when temperature is falling
+HOLD_TIME_AFTER_UP_SECS=300   # Minimum seconds to hold PWM after any upward change (prevents chatter)
 # ============================================================
 
 find_hwmon_by_name() {
@@ -243,18 +285,27 @@ apply_pwm() {
 }
 
 main_loop() {
-    local temp_c smoothed_temp error pwm last_temp=0
+    local temp_c smoothed_temp error pwm last_temp=0 last_pwm last_change_time=0
+    last_pwm=$MIN_SAFE_PWM
 
     while true; do
         if ! temp_c=$(read_max_hdd_temp); then
             apply_pwm "$MIN_SAFE_PWM"
+            last_pwm=$MIN_SAFE_PWM
+            last_change_time=0
             sleep "$SLEEP_SECS"
             continue
         fi
 
-        # EMA smoothing (integer math)
+        # Asymmetric EMA smoothing: fast on rise, slow on fall
         if (( last_temp > 0 )); then
-            smoothed_temp=$(( (last_temp * (100 - EMA_HUNDREDTHS) + temp_c * EMA_HUNDREDTHS) / 100 ))
+            local ema_hundredths
+            if (( temp_c > last_temp )); then
+                ema_hundredths=$RISE_EMA_HUNDREDTHS
+            else
+                ema_hundredths=$FALL_EMA_HUNDREDTHS
+            fi
+            smoothed_temp=$(( (last_temp * (100 - ema_hundredths) + temp_c * ema_hundredths) / 100 ))
         else
             smoothed_temp=$temp_c
         fi
@@ -262,6 +313,8 @@ main_loop() {
         # Emergency full speed override
         if (( temp_c >= MAX_SAFE_TEMP_C )); then
             apply_pwm 183
+            last_pwm=183
+            last_change_time=$(date +%s)
             last_temp=$smoothed_temp
             sleep "$SLEEP_SECS"
             continue
@@ -275,7 +328,25 @@ main_loop() {
         (( pwm < MIN_SAFE_PWM )) && pwm=$MIN_SAFE_PWM
         (( pwm > 183 )) && pwm=183
 
-        apply_pwm "$pwm"
+        # Timer-based anti-chatter:
+        # - Always allow upward changes immediately
+        # - Only allow downward changes after HOLD_TIME_AFTER_UP_SECS has passed since last change
+        local current_time
+        current_time=$(date +%s)
+        local do_apply=false
+
+        if (( pwm > last_pwm )); then
+            do_apply=true
+        elif (( pwm < last_pwm )) && (( current_time - last_change_time >= HOLD_TIME_AFTER_UP_SECS )); then
+            do_apply=true
+        fi
+
+        if [[ "$do_apply" == true ]]; then
+            apply_pwm "$pwm"
+            last_pwm=$pwm
+            last_change_time=$current_time
+        fi
+
         last_temp=$smoothed_temp
         sleep "$SLEEP_SECS"
     done
@@ -358,3 +429,4 @@ echo 120 | sudo tee "$ZETTLAB/pwm3"
 - Thermal lag is significant (30–120+ seconds). The controller uses smoothing and conservative gain values.
 - All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
 - If any temperature sensor fails to read, the system falls back to a safe high PWM level.
+- Timer-based hysteresis (`HOLD_TIME_AFTER_UP_SECS`) holds the fan PWM steady for the configured time after any upward change, preventing frequent speed adjustments.
