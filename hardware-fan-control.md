@@ -1,10 +1,12 @@
 # Fan Control Configuration
 
-**Purpose**
+> Implements dynamic, temperature-adaptive fan control for both CPU and disk fans on Zettlab D6/D8 Ultra using the `zettlab_d8_fans` kernel module.
 
-This guide implements fan control for the Zettlab D6/D8 Ultra running Ubuntu 26.04 using the `zettlab_d8_fans` kernel module. It provides dynamic, temperature-adaptive fan control for both CPU and disk fans.
+## Overview
 
-This guide supports both D6 (6-bay) and D8 (8-bay) variants.
+This guide supports both D6 (6-bay) and D8 (8-bay) variants. The control logic maintains:
+- **CPU Package Temperature**: Idle 42–50 °C, Maximum load ≤65 °C
+- **HDD Temperatures**: Idle 32–37 °C, Maximum load ≤38 °C
 
 ## Fan Configuration
 
@@ -14,25 +16,15 @@ This guide supports both D6 (6-bay) and D8 (8-bay) variants.
 | `fan2` | Rear disk fan 2 |
 | `fan3` | CPU fan |
 
-## Temperature Targets
+## Prerequisites
 
-The control logic maintains the following targets:
-
-| Component | Idle Range | Maximum Load |
-|-----------|------------|--------------|
-| CPU Package Temperature | 42–50 °C | 65 °C |
-| HDD Temperatures | 32–37 °C | ≤38 °C |
-
-## Safety Considerations
-
-- Fans have a physical minimum effective speed. PWM values below ~60–80 can cause stalling.
-- Thermal lag is significant (30–120+ seconds). The controller uses smoothing and conservative gain values.
-- All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
-- If any temperature sensor fails to read, the system falls back to a safe high PWM level.
+- Ubuntu 26.04 Server installed
+- User account with `sudo` privileges
+- Zettlab D6/D8 Ultra hardware
 
 ## Kernel Module Installation
 
-### DKMS Setup
+### Step 1: Clone and Install via DKMS
 
 ```bash
 git clone https://github.com/haveacry/zettlab-d8-fans.git
@@ -47,13 +39,13 @@ sudo dkms install -m zettlab-d8-fans -v 0.0.1
 sudo modprobe zettlab_d8_fans
 ```
 
-### Automatic Module Loading
+### Step 2: Enable Automatic Module Loading
 
 ```bash
 echo zettlab_d8_fans | sudo tee /etc/modules-load.d/zettlab_d8_fans.conf
 ```
 
-### Verification
+### Step 3: Verify Installation
 
 ```bash
 lsmod | grep zettlab_d8_fans
@@ -63,7 +55,9 @@ sensors
 
 ## CPU Fan Control
 
-The controller calculates the minimum PWM required to maintain CPU near target temperature using EMA smoothing and configurable parameters.
+### Create CPU Fan Script
+
+Save as `/usr/local/sbin/cpu-fan-curve.sh`:
 
 ```bash
 #!/bin/bash
@@ -71,10 +65,10 @@ set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
 TARGET_CPU_C=45          # Ideal CPU temperature target (°C)
-MIN_SAFE_PWM=80          # Absolute minimum PWM (do not go lower or fans may stall)
-MAX_SAFE_TEMP_C=70       # Force full speed (183) if temperature exceeds this
-GAIN_TENTHS=40           # Proportional gain ×10 (40 = 4.0). Higher = more aggressive
-EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (25 = 0.25). Lower = slower response
+MIN_SAFE_PWM=80          # Absolute minimum PWM
+MAX_SAFE_TEMP_C=70       # Force full speed if temperature exceeds this
+GAIN_TENTHS=40           # Proportional gain ×10 (higher = more aggressive)
+EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (lower = slower response)
 # ============================================================
 
 find_hwmon_by_name() {
@@ -85,7 +79,7 @@ find_hwmon_by_name() {
             return 0
         fi
     done
-    echo "ERROR: Could not find hwmon device with name '$target_name'. Is the zettlab_d8_fans module loaded?" >&2
+    echo "ERROR: Could not find hwmon device with name '$target_name'." >&2
     return 1
 }
 
@@ -152,13 +146,7 @@ main_loop() {
 main_loop
 ```
 
-### CPU Fan Service
-
-Save as `/usr/local/sbin/cpu-fan-curve.sh` and make executable:
-
-```bash
-sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
-```
+### Create CPU Fan Service
 
 Service file: `/etc/systemd/system/cpu-fan-curve.service`
 
@@ -177,9 +165,17 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
+Make executable and enable:
+
+```bash
+sudo chmod +x /usr/local/sbin/cpu-fan-curve.sh
+```
+
 ## HDD Fan Control
 
-The controller detects all SATA drives (sda–sdh), reads the highest SMART temperature, and controls both rear disk fans. Empty bays are automatically ignored.
+### Create HDD Fan Script
+
+Save as `/usr/local/sbin/hdd-fan-curve.sh`:
 
 ```bash
 #!/bin/bash
@@ -188,9 +184,9 @@ set -euo pipefail
 # ================== USER-CONFIGURABLE SETTINGS ==================
 TARGET_HDD_C=39          # Ideal maximum HDD temperature (°C)
 MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=50       # Force full speed (183) if any drive exceeds this
-GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2). Lower because HDDs react slower
-EMA_HUNDREDTHS=25        # EMA smoothing factor ×100 (25 = 0.25)
+MAX_SAFE_TEMP_C=50       # Force full speed if any drive exceeds this
+GAIN_TENTHS=22           # Proportional gain ×10 (lower because HDDs react slower)
+EMA_HUNDREDTHS=25        # EMA smoothing factor ×100
 # ============================================================
 
 find_hwmon_by_name() {
@@ -201,7 +197,7 @@ find_hwmon_by_name() {
             return 0
         fi
     done
-    echo "ERROR: Could not find hwmon device with name '$target_name'. Is the zettlab_d8_fans module loaded?" >&2
+    echo "ERROR: Could not find hwmon device with name '$target_name'." >&2
     return 1
 }
 
@@ -288,13 +284,7 @@ main_loop() {
 main_loop
 ```
 
-### HDD Fan Service
-
-Save as `/usr/local/sbin/hdd-fan-curve.sh` and make executable:
-
-```bash
-sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
-```
+### Create HDD Fan Service
 
 Service file: `/etc/systemd/system/hdd-fan-curve.service`
 
@@ -313,28 +303,38 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+Make executable and enable:
+
+```bash
+sudo chmod +x /usr/local/sbin/hdd-fan-curve.sh
+```
+
 ## Service Activation
 
-After creating both scripts and service files:
+### Start and Enable Services
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now cpu-fan-curve.service hdd-fan-curve.service
 ```
 
-### Service Status
+### Verify Service Status
 
 ```bash
 systemctl status cpu-fan-curve.service
 systemctl status hdd-fan-curve.service
+
+# View logs
 journalctl -u cpu-fan-curve.service -f
 journalctl -u hdd-fan-curve.service -f
 ```
 
 ## Runtime Commands
 
+### Read Current Values
+
 ```bash
-# Read current hwmon devices and names
+# Read hwmon device names
 for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && echo "$d: $(cat "$d/name")"; done
 
 # Read temperature values
@@ -350,3 +350,11 @@ cat /sys/class/hwmon/hwmon*/pwm[1-3] 2>/dev/null
 ZETTLAB=$(for d in /sys/class/hwmon/hwmon*; do [ -f "$d/name" ] && [[ "$(cat "$d/name")" == "zettlab_d8_fans" ]] && echo "$d"; done)
 echo 1 | sudo tee "$ZETTLAB/pwm3_enable"
 echo 120 | sudo tee "$ZETTLAB/pwm3"
+```
+
+## Safety Notes
+
+- Fans have a physical minimum effective speed. PWM values below ~60–80 can cause stalling.
+- Thermal lag is significant (30–120+ seconds). The controller uses smoothing and conservative gain values.
+- All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
+- If any temperature sensor fails to read, the system falls back to a safe high PWM level.

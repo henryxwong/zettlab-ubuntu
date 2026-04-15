@@ -1,18 +1,16 @@
 # Intel Arc iGPU Driver Installation
 
-**Purpose**
+> Installs the Intel Graphics compute and media stack for integrated Arc Graphics (Meteor Lake iGPU) on Intel Core Ultra 5 125H.
 
-This guide installs the Intel Graphics compute and media stack for the integrated Arc Graphics (Meteor Lake iGPU) on the Intel Core Ultra 5 125H.
+## Overview
 
-Enabled functionality:
+This guide enables:
 - Hardware video decoding/encoding (VA-API / Quick Sync)
 - OpenCL and oneAPI Level Zero compute runtime
 - Full access to `/dev/dri/renderD*` device nodes
 - Proper support for the front LCD (`eDP-1`)
 
-**Note on Ubuntu 26.04 Resolute**
-
-Some advanced packages (intel-gsc, intel-metrics-discovery, libmfx-gen1) are not yet available in the official repositories. The package list below contains only packages present in Ubuntu 26.04.
+> **Note**: Some advanced packages (intel-gsc, intel-metrics-discovery, libmfx-gen1) are not yet available in Ubuntu 26.04 official repositories.
 
 ## Prerequisites
 

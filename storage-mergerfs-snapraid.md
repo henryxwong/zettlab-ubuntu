@@ -1,28 +1,23 @@
 # Storage Pool Setup: mergerfs + SnapRAID
 
-**Disk Assumptions**
+> Configures XFS data disks with Btrfs parity disk, using mergerfs for pooling and SnapRAID for backup on Zettlab D6/D8 Ultra NAS.
 
-This guide assumes:
-- `/dev/sda` to `/dev/sde` are **5 data disks**
-- `/dev/sdf` is the dedicated **parity disk**
+## Overview
 
-**Important**: Device names (`/dev/sdX`) are not persistent and may change after reboots, kernel updates, or SATA reordering. Always verify with `lsblk` and use UUIDs (or `/dev/disk/by-id/`) in `/etc/fstab` and `snapraid.conf`.
+**Disk Assumptions:**
+- `/dev/sda` to `/dev/sde`: **5 data disks**
+- `/dev/sdf`: **dedicated parity disk**
 
-## Filesystem Configuration
+> **Important**: Device names (`/dev/sdX`) are not persistent and may change after reboots. Always verify with `lsblk` and use UUIDs in `/etc/fstab`.
 
-**Recommended / default configuration**:
-- **Data disks** (`/dev/sda`–`/dev/sde`): **XFS** (optimal performance; no 16 TB file-size limit)
-- **Parity disk** (`/dev/sdf`): **Btrfs** (enables snapshot-based replication with `btrfs send | receive`)
+**Filesystem Configuration:**
+- **Data disks**: XFS (optimal performance; no 16 TB file-size limit)
+- **Parity disk**: Btrfs (enables snapshot-based replication with `btrfs send | receive`)
 
-Alternative configurations:
-- Use `ext4` on data disks if the parity file stays under 16 TB.
-- Use `XFS` on parity for simpler setup with slightly faster performance if snapshots are not required.
-- Avoid `Btrfs` on data disks due to CoW overhead negatively impacting SnapRAID performance.
-
-**Directory structure**:
+**Directory Structure:**
 - `/mnt/disk1` – `/mnt/disk5`: Individual data disks
 - `/mnt/parity`: Parity disk
-- `/mnt/pool`: mergerfs pooled mount point (daily use)
+- `/mnt/pool`: mergerfs pooled mount point
 
 ## Prerequisites
 
@@ -57,8 +52,6 @@ sudo parted -s /dev/sdf mkpart primary 0% 100%
 sudo mkfs.btrfs -f -L parity /dev/sdf1
 ```
 
-Modify `mkfs.*` commands if a different filesystem is selected.
-
 ### Step 3: Create Mount Points
 
 ```bash
@@ -75,7 +68,7 @@ sudo blkid
 
 Add entries to `/etc/fstab` using UUIDs:
 
-```conf
+```
 # Data disks (XFS)
 UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx /mnt/disk1 xfs defaults,noatime 0 2
 UUID=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy /mnt/disk2 xfs defaults,noatime 0 2
@@ -87,12 +80,64 @@ UUID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb /mnt/disk5 xfs defaults,noatime 0 2
 UUID=cccccccc-cccc-cccc-cccc-cccccccccccc /mnt/parity btrfs defaults,noatime,compress=no,autodefrag 0 2
 ```
 
-Reload systemd and test mounts:
+Test mounts:
 
 ```bash
 sudo systemctl daemon-reload
 sudo mount -a
 df -h | grep -E 'disk|parity|pool'
+```
+
+## Software Installation
+
+### Step 1: Install SnapRAID
+
+```bash
+sudo apt update
+sudo apt install snapraid -y
+```
+
+### Step 2: Install mergerfs
+
+Check for latest release at https://github.com/trapexit/mergerfs/releases
+
+```bash
+cd /tmp
+wget https://github.com/trapexit/mergerfs/releases/download/2.41.1/mergerfs_2.41.1.ubuntu-noble_amd64.deb
+sudo dpkg -i mergerfs_*.deb
+mergerfs -V
+```
+
+## Pool Configuration
+
+### Step 1: Configure mergerfs in fstab
+
+Add the following line to `/etc/fstab`:
+
+```
+/mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=epmfs,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
+```
+
+### Step 2: Mount Pool
+
+```bash
+sudo systemctl daemon-reload
+sudo mount -a
+ls /mnt/pool
+```
+
+### mergerfs Policy Reference
+
+| Policy | Description |
+|--------|-------------|
+| **epmfs** (default) | Existing-path most-free-space; preserves directory path |
+| eplfs | Existing-path least-free-space |
+| mfs | Most-free-space (always picks disk with most space) |
+| ff | First-found (creates on first disk with space) |
+
+To change policy, edit the mergerfs line in `/etc/fstab` and run:
+```bash
+sudo systemctl daemon-reload && sudo mount -a
 ```
 
 ## Parity File Configuration
@@ -110,66 +155,6 @@ sudo chattr +C /mnt/parity/snapraid.parity
 lsattr /mnt/parity/snapraid.parity   # should show "C"
 ```
 
-## Software Installation
-
-### Install SnapRAID and mergerfs
-
-```bash
-sudo apt update
-sudo apt install snapraid -y
-```
-
-Install latest mergerfs:
-
-```bash
-cd /tmp
-# Check https://github.com/trapexit/mergerfs/releases for latest Ubuntu 26.04 .deb
-wget https://github.com/trapexit/mergerfs/releases/download/2.41.1/mergerfs_2.41.1.ubuntu-noble_amd64.deb
-sudo dpkg -i mergerfs_*.deb
-mergerfs -V
-```
-
-## Pool Configuration
-
-Add the following line to `/etc/fstab`:
-
-```conf
-/mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=epmfs,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
-```
-
-Reload systemd and mount:
-
-```bash
-sudo systemctl daemon-reload
-sudo mount -a
-ls /mnt/pool
-```
-
-### mergerfs Policy Reference
-
-The `category.create` option controls where new files and directories are created.
-
-**Default policy: `epmfs` (recommended for media/NAS)**
-- **epmfs** = existing-path most-free-space
-  - Preserves full directory path when possible.
-  - Picks disk with most free space when path exists on multiple disks.
-  - Falls back to most-free-space when path does not exist.
-
-**Alternative policies:**
-- **eplfs**: existing-path least-free-space (prefers disk with least free space)
-- **pfrd**: percentage-free random distribution
-- **ff**: first-found (fastest; creates on first disk with space)
-- **mfs**: most-free-space (always picks disk with most free space)
-- **rand**: random among disks with sufficient space
-- **lfs/lus**: least-free-space / least-used-space
-
-To change policy:
-1. Edit the mergerfs line in `/etc/fstab`.
-2. Run `sudo systemctl daemon-reload && sudo mount -a`.
-3. Existing files are unaffected; only new creations follow the new policy.
-
-Reference: [mergerfs Policy Descriptions](https://github.com/trapexit/mergerfs#policy-descriptions)
-
 ## SnapRAID Configuration
 
 ```bash
@@ -178,11 +163,11 @@ sudo nano /etc/snapraid.conf
 
 Configuration file:
 
-```conf
+```
 # Parity
 parity /mnt/parity/snapraid.parity
 
-# Content files
+# Content files (for quick content listing)
 content /var/snapraid.content
 content /mnt/disk1/.snapraid.content
 content /mnt/disk2/.snapraid.content
@@ -206,7 +191,7 @@ exclude .snapraid.content
 autosave 1000
 ```
 
-Initial sync:
+### Initial Sync
 
 ```bash
 sudo snapraid -c /etc/snapraid.conf diff
@@ -248,6 +233,3 @@ Add cron entry:
 
 ```
 0 3 * * * /usr/local/bin/snapraid-maintenance.sh
-```
-
-**Note**: The parity disk is formatted as Btrfs for future snapshot-based replication. The disk is ready whenever needed.

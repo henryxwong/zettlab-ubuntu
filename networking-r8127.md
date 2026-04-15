@@ -1,10 +1,6 @@
 # Realtek r8127 DKMS Driver Installation
 
-**Purpose**
-
-The in-kernel `r8169` driver for RTL8127A NICs can cause packet drops, transmit timeouts, and SSH connection issues under high CPU load. The official Realtek `r8127` DKMS driver provides improved stability on this hardware.
-
-This guide applies to **Ubuntu 26.04 Server** on the Zettlab D6/D8 Ultra.
+> Replaces the in-kernel `r8169` driver with the official Realtek `r8127` DKMS driver for improved stability on RTL8127A 10GbE NICs.
 
 ## Prerequisites
 
@@ -45,6 +41,8 @@ sudo reboot
 
 After reboot, verify the driver is active:
 
+### Driver Information
+
 ```bash
 ethtool -i enp88s0
 ethtool -i enp89s0
@@ -52,7 +50,7 @@ ethtool -i enp89s0
 
 Expected output includes `driver: r8127`.
 
-Confirm network status:
+### Network Status
 
 ```bash
 ip link show enp88s0
@@ -60,7 +58,7 @@ ip link show enp89s0
 sudo ethtool enp88s0 | grep -E "Speed|Link detected"
 ```
 
-Check kernel messages:
+### Kernel Messages
 
 ```bash
 dmesg | grep -E 'r8127|RTL8127'
