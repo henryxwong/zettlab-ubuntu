@@ -5,8 +5,8 @@
 ## Overview
 
 This guide supports both D6 (6-bay) and D8 (8-bay) variants. The control logic maintains:
-- **CPU Package Temperature**: Idle 42–50 °C, Maximum load ≤65 °C
-- **HDD Temperatures**: Idle 32–37 °C, Maximum load ≤38 °C
+- **CPU Package Temperature**: Idle 42–52 °C, Sustained load ≤68 °C
+- **HDD Temperatures**: Idle 35–40 °C, Sustained load ≤45 °C
 
 The fan curves are designed to be:
 - Highly responsive when temperatures are rising (fast fan ramp-up)
@@ -430,8 +430,36 @@ echo 1 | sudo tee "$ZETTLAB/pwm3_enable"
 echo 120 | sudo tee "$ZETTLAB/pwm3"
 ```
 
+## Expected Behavior & Monitoring
+
+The controllers are deliberately designed to be:
+- Fast on temperature **rise** (quick response to load)
+- Slow on temperature **fall** (3-minute hold for CPU, 4-minute hold for HDD fans after any upward change)
+
+This prevents annoying fan “hunting” and reduces mechanical wear.
+
+**Recommended monitoring commands** (run after startup):
+
+```bash
+# Watch live fan control decisions
+journalctl -u cpu-fan-curve.service -f
+journalctl -u hdd-fan-curve.service -f
+
+# Real-time temperatures + PWM
+watch -n 2 'sensors | grep -E "Core|fan|PWM"'
+
+# Check how often PWM actually changes (should be infrequent)
+sudo journalctl -u cpu-fan-curve.service | grep -c "apply_pwm"
+```
+
+After 24–48 hours of mixed load you should see very few downward PWM changes — this is normal and desired.
+
+**Optional fine-tuning**  
+If your CPU consistently idles 2–3 °C above the target you prefer, edit `/usr/local/sbin/cpu-fan-curve.sh` and lower `TARGET_CPU_C` from `51` to `48`. No other values need changing.
+
 ## Safety Notes
 
+- The fan curves are intentionally conservative and anti-chatter focused. You will rarely (if ever) hear the fans ramp up and down rapidly.
 - Fans have a physical minimum effective speed. PWM values below ~60–80 can cause stalling.
 - Thermal lag is significant (30–120+ seconds). The controller uses smoothing and conservative gain values.
 - All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
