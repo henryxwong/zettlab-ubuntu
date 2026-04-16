@@ -213,7 +213,7 @@ Script content:
 LOG=/var/log/snapraid.log
 echo "=== SnapRAID maintenance started at $(date) ===" >> $LOG
 snapraid -c /etc/snapraid.conf sync >> $LOG 2>&1
-snapraid -c /etc/snapraid.conf scrub -p 8 -o 0 >> $LOG 2>&1
+snapraid -c /etc/snapraid.conf scrub -p 4 -o 0 >> $LOG 2>&1
 echo "=== SnapRAID maintenance finished at $(date) ===" >> $LOG
 ```
 
