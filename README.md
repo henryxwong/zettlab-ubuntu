@@ -4,7 +4,7 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for installing and configuring Ubuntu 26.04 on Zettlab D6/D8 Ultra NAS devices. It covers everything from initial installation to advanced storage pool configuration.
+This guide provides step-by-step instructions for installing and configuring Ubuntu 26.04 on Zettlab D6/D8 Ultra NAS devices. It covers everything from initial installation to advanced storage pool configuration and data protection.
 
 **⚠ Disclaimer:** All information is provided as-is. Test thoroughly before applying to production systems. Always backup data before making system changes.
 
@@ -35,6 +35,7 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 | [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
 | [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
 | [Storage Pool](storage-mergerfs-snapraid.md) | mergerfs + SnapRAID configuration |
+| [Btrfs Data Replication](btrfs-data-replication.md) | Dedicated `/data` subvolume + btrbk snapshot replication to parity disk |
 
 ---
 

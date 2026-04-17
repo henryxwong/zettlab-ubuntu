@@ -45,13 +45,15 @@ Download Ubuntu Server 26.04 ISO and write to USB using Rufus, balenaEtcher, or 
    ```
 5. Press **Ctrl+X** or **F10** to boot
 
-### Step 3: Install Ubuntu
+### Step 3: Install Ubuntu (Btrfs recommended)
 
-Install Ubuntu on a different drive than the original ZettOS NVMe to preserve it as fallback.
+**Strongly recommended:** Format the root filesystem (`/`) as **Btrfs**.  
+This enables native subvolumes, snapshots, and incremental replication.
 
-During installer:
-- Verify target drive selection
-- Use guided storage layout
+During the installer:
+- Select **Guided storage layout**
+- Choose **Btrfs** as the filesystem for the root partition (Ubuntu 26.04 installer fully supports Btrfs root)
+- Install Ubuntu on a different drive than the original ZettOS NVMe (recommended: secondary NVMe SSD)
 - Create user account
 - Complete installation and reboot
 
@@ -61,8 +63,14 @@ Remove USB drive after reboot.
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install lm-sensors smartmontools curl git -y
+sudo apt install lm-sensors smartmontools curl git btrbk -y
 ```
+
+### Recommended: Btrfs Data Protection
+
+After installation, create a dedicated `/data` subvolume and set up automatic snapshot replication to your Btrfs parity disk.
+
+→ Follow the **[Btrfs Data Replication Guide](btrfs-data-replication.md)** for full instructions (includes btrbk configuration, retention policy, and daily cron).
 
 ## Known Hardware Support in Ubuntu 26.04
 
