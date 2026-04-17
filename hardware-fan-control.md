@@ -17,6 +17,7 @@ Both CPU and HDD controllers follow consistent design principles:
 - EMA smoothing is calculated before the emergency full-speed check
 - Emergency override uses the smoothed temperature (protected against single raw sensor spikes)
 - Identical anti-chatter timer logic and asymmetric rise/fall response (RISE_EMA_HUNDREDTHS > FALL_EMA_HUNDREDTHS)
+- On any temperature sensor read failure, the system forces full fan speed (183 PWM) for safety
 
 ## Fan Configuration
 
@@ -76,13 +77,13 @@ set -euo pipefail
 # ================== USER-CONFIGURABLE SETTINGS ==================
 TARGET_CPU_C=51          # Ideal CPU temperature target (°C)
 MIN_SAFE_PWM=70          # Absolute minimum PWM (do not go lower or fans may stall)
-MAX_SAFE_TEMP_C=70       # Force full speed (183) if smoothed temperature exceeds this
-GAIN_TENTHS=18           # Proportional gain ×10 (18 = 1.8). Strongly reduced to ignore short spikes
+MAX_SAFE_TEMP_C=85       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=18           # Proportional gain ×10 (18 = 1.8)
 
 # Asymmetric response & timer-based anti-chatter
-RISE_EMA_HUNDREDTHS=25   # Faster response when temperature is rising (damped to reduce spike sensitivity)
+RISE_EMA_HUNDREDTHS=25   # Faster response when temperature is rising
 FALL_EMA_HUNDREDTHS=8    # Much slower response when temperature is falling
-HOLD_TIME_AFTER_UP_SECS=180   # Minimum seconds to hold PWM after any upward change (3 minutes – balanced anti-chatter)
+HOLD_TIME_AFTER_UP_SECS=90    # Minimum seconds to hold PWM after any upward change
 # ============================================================
 
 find_hwmon_by_name() {
@@ -124,8 +125,9 @@ main_loop() {
 
     while true; do
         if ! temp_c=$(read_temp_c); then
-            apply_pwm "$MIN_SAFE_PWM"
-            last_pwm=$MIN_SAFE_PWM
+            # SAFETY: Force full speed on any sensor read failure
+            apply_pwm 183
+            last_pwm=183
             last_change_time=0
             sleep "$SLEEP_SECS"
             continue
@@ -228,13 +230,13 @@ set -euo pipefail
 # ================== USER-CONFIGURABLE SETTINGS ==================
 TARGET_HDD_C=41          # Ideal maximum HDD temperature (°C)
 MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=55       # Force full speed (183) if smoothed temperature exceeds this
-GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2). Lower because HDDs react slower
+MAX_SAFE_TEMP_C=60       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2)
 
 # Asymmetric response & timer-based anti-chatter
 RISE_EMA_HUNDREDTHS=35   # Faster response when temperature is rising
 FALL_EMA_HUNDREDTHS=10   # Much slower response when temperature is falling
-HOLD_TIME_AFTER_UP_SECS=240   # Minimum seconds to hold PWM after any upward change (4 minutes – balanced anti-chatter)
+HOLD_TIME_AFTER_UP_SECS=120   # Minimum seconds to hold PWM after any upward change
 # ============================================================
 
 find_hwmon_by_name() {
@@ -296,8 +298,9 @@ main_loop() {
 
     while true; do
         if ! temp_c=$(read_max_hdd_temp); then
-            apply_pwm "$MIN_SAFE_PWM"
-            last_pwm=$MIN_SAFE_PWM
+            # SAFETY: Force full speed on any sensor read failure
+            apply_pwm 183
+            last_pwm=183
             last_change_time=0
             sleep "$SLEEP_SECS"
             continue
@@ -432,9 +435,9 @@ echo 120 | sudo tee "$ZETTLAB/pwm3"
 
 ## Expected Behavior & Monitoring
 
-The controllers are deliberately designed to be:
+The controllers are designed to be:
 - Fast on temperature **rise** (quick response to load)
-- Slow on temperature **fall** (3-minute hold for CPU, 4-minute hold for HDD fans after any upward change)
+- Slow on temperature **fall** (90-second hold for CPU, 120-second hold for HDD fans after any upward change)
 
 This prevents annoying fan “hunting” and reduces mechanical wear.
 
@@ -463,6 +466,6 @@ If your CPU consistently idles 2–3 °C above the target you prefer, edit `/usr
 - Fans have a physical minimum effective speed. PWM values below ~60–80 can cause stalling.
 - Thermal lag is significant (30–120+ seconds). The controller uses smoothing and conservative gain values.
 - All scripts include hard-coded minimum safe PWM values and emergency full-speed overrides.
-- If any temperature sensor fails to read, the system falls back to a safe high PWM level.
+- If any temperature sensor fails to read, the system forces full-speed (183 PWM).
 - Timer-based hysteresis (`HOLD_TIME_AFTER_UP_SECS`) holds the fan PWM steady for the configured time after any upward change, preventing frequent speed adjustments.
 - Emergency overrides in both controllers use smoothed temperature to prevent false triggers from short sensor spikes.
