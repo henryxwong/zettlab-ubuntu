@@ -27,7 +27,7 @@ sudo nano /etc/default/grub
 Locate the `GRUB_CMDLINE_LINUX_DEFAULT=` line and set it to:
 
 ```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:d loglevel=3 snd_intel_dspcfg.dsp_driver=1"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:d snd_intel_dspcfg.dsp_driver=1"
 ```
 
 Save changes (Ctrl+O → Enter → Ctrl+X).

@@ -1,37 +1,49 @@
-# Realtek r8127 DKMS Driver Installation
+# Realtek RTL8127 10GbE Networking Configuration (Zettlab D6/D8 Ultra)
 
-> Replaces the in-kernel `r8169` driver with the official Realtek `r8127` DKMS driver for improved stability on RTL8127A 10GbE NICs.
+> Recommended stable setup using the **stock in-kernel r8169 driver**
 
-## Prerequisites
+## Overview
 
-- Ubuntu 26.04 Server installed with internet access
-- `git`, `dkms`, and build tools
+On the Zettlab D6/D8 Ultra, the **stock `r8169` driver** has proven significantly more stable than the third-party `r8127` DKMS driver.  
+It eliminates the random disconnects and packet drops that many users experience with r8127 (especially under CPU load).
 
-## Installation Procedure
+**Recommendation:** Use the built-in `r8169` driver + the stability tunings below.
 
-### Step 1: Install Build Dependencies
+## Step 1: Apply Stability Kernel Parameters
 
-```bash
-sudo apt update
-sudo apt install dkms build-essential git -y
-```
-
-### Step 2: Clone and Install the r8127 DKMS Driver
+Edit GRUB configuration:
 
 ```bash
-git clone https://github.com/PeterSuh-Q3/r8127.git
-cd r8127
-sudo ./autorun.sh
+sudo nano /etc/default/grub
 ```
 
-### Step 3: Blacklist the r8169 Driver
+Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to include (or add) the following:
 
 ```bash
-echo "blacklist r8169" | sudo tee /etc/modprobe.d/blacklist-r8169.conf
-sudo update-initramfs -u
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash pcie_aspm.policy=performance pcie_port_pm=off"
 ```
 
-### Step 4: Reboot
+Apply the changes:
+
+```bash
+sudo update-grub
+```
+
+## Step 2: Apply Network High-Load Tuning
+
+```bash
+cat << EOF | sudo tee -a /etc/sysctl.conf
+
+# Zettlab D6/D8 Ultra 10GbE stability tuning (r8169)
+net.core.netdev_max_backlog = 10000
+net.core.netdev_budget = 60000
+net.core.rps_sock_flow_entries = 32768
+EOF
+
+sudo sysctl -p
+```
+
+## Step 3: Reboot
 
 ```bash
 sudo reboot
@@ -39,56 +51,31 @@ sudo reboot
 
 ## Verification
 
-After reboot, verify the driver is active:
-
-### Driver Information
+After reboot, confirm you are using the stock driver:
 
 ```bash
-ethtool -i enp88s0
-ethtool -i enp89s0
+ethtool -i enp88s0 | grep driver
+ethtool -i enp89s0 | grep driver
 ```
 
-Expected output includes `driver: r8127`.
+Expected output:
+```
+driver: r8169
+```
 
-### Network Status
+Monitor packet drops (should stay at 0 even under load):
 
 ```bash
-ip link show enp88s0
-ip link show enp89s0
-sudo ethtool enp88s0 | grep -E "Speed|Link detected"
+watch -n 2 'echo "=== enp88s0 ==="; ethtool -S enp88s0 | grep rx_missed; echo "=== enp89s0 ==="; ethtool -S enp89s0 | grep rx_missed'
 ```
 
-### Kernel Messages
+## Optional: Trying the r8127 DKMS Driver
 
-```bash
-dmesg | grep -E 'r8127|RTL8127'
-```
-
-## Updating the Driver
-
-```bash
-cd ~/r8127
-git pull
-sudo ./autorun.sh
-sudo update-initramfs -u
-sudo reboot
-```
-
-## Reverting to r8169 Driver
-
-```bash
-sudo rm /etc/modprobe.d/blacklist-r8169.conf
-sudo update-initramfs -u
-cd ~/r8127
-sudo ./autorun.sh --uninstall
-sudo reboot
-```
+Only recommended if you have a specific need for the r8127 driver. Most users on the Zettlab D6/D8 Ultra get better stability with the stock `r8169` driver.
 
 ## Troubleshooting
 
-| Issue | Resolution |
-|-------|------------|
-| Build fails | Install headers: `sudo apt install linux-headers-$(uname -r) -y`; rerun `./autorun.sh` |
-| NICs not detected after reboot | Boot previous kernel from GRUB and revert changes |
-| r8169 still shown in ethtool | Verify blacklist file; run `update-initramfs -u` |
-| Link speed drops to 1 Gbps | Force link: `sudo ethtool -s enp88s0 speed 2500 duplex full autoneg off` |
+| Issue                    | Resolution |
+|--------------------------|------------|
+| Still seeing disconnects | Verify `pcie_aspm.policy=performance` is active (`cat /proc/cmdline`) |
+| High `rx_missed` counters| Increase the sysctl values further or check cable/switch |
