@@ -131,7 +131,31 @@ sudo btrbk stats
 
 ## Step 6: Set up automatic daily replication (consistent with SnapRAID)
 
-Use the same method as the SnapRAID maintenance script:
+Create a small wrapper script so the cron job is consistent with the SnapRAID maintenance script.
+
+```bash
+sudo nano /usr/local/bin/btrbk-run.sh
+```
+
+**Paste the following content:**
+
+```bash
+#!/bin/bash
+# btrbk wrapper script for scheduled execution
+
+LOG=/var/log/btrbk.log
+echo "=== btrbk replication started at $(date) ===" >> $LOG
+/usr/bin/btrbk run >> $LOG 2>&1
+echo "=== btrbk replication finished at $(date) ===" >> $LOG
+```
+
+Make the script executable:
+
+```bash
+sudo chmod +x /usr/local/bin/btrbk-run.sh
+```
+
+Now add the cron job:
 
 ```bash
 sudo crontab -e
@@ -140,7 +164,7 @@ sudo crontab -e
 Add this line (runs at 04:00 every day, one hour after SnapRAID):
 
 ```
-0 4 * * * /usr/bin/btrbk run
+0 4 * * * /usr/local/bin/btrbk-run.sh
 ```
 
 Save and exit the editor.
@@ -173,6 +197,7 @@ sudo btrbk clean
 
 ### Check logs
 ```bash
+cat /var/log/btrbk.log
 sudo journalctl -u btrbk -e
 ```
 
