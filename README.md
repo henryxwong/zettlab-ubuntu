@@ -36,6 +36,7 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 | [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
 | [Storage Pool](storage-mergerfs-snapraid.md) | mergerfs + SnapRAID configuration |
 | [Btrfs Data Replication](btrfs-data-replication.md) | Dedicated `/data` subvolume + btrbk snapshot replication to parity disk |
+| [Samba Shares](samba-shares.md) | Home + /data + mergerfs pool Samba shares |
 
 ---
 
