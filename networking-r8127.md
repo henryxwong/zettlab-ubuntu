@@ -4,12 +4,12 @@
 
 ## Overview
 
-On the Zettlab D6/D8 Ultra, the **stock `r8169` driver** has proven significantly more stable than the third-party `r8127` DKMS driver.  
-It eliminates the random disconnects and packet drops that many users experience with r8127 (especially under CPU load).
+On the Zettlab D6/D8 Ultra, the **stock `r8169` driver** has proven significantly more stable than the third-party `r8127` DKMS driver for sustained video streaming and general use.  
+It eliminates the random disconnects and packet drops that many users experience with r8127 (especially under light-to-medium load).
 
-**Recommendation:** Use the built-in `r8169` driver + the stability tunings below.
+**Recommendation:** Use the built-in `r8169` driver + the minimal stability tunings below.
 
-## Step 1: Apply Stability Kernel Parameters
+## Step 1: Required Kernel Parameters
 
 Edit GRUB configuration:
 
@@ -17,10 +17,10 @@ Edit GRUB configuration:
 sudo nano /etc/default/grub
 ```
 
-Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to include (or add) the following:
+Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to include:
 
 ```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash pcie_aspm.policy=performance pcie_port_pm=off"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash pcie_aspm=off pcie_port_pm=off"
 ```
 
 Apply the changes:
@@ -29,12 +29,12 @@ Apply the changes:
 sudo update-grub
 ```
 
-## Step 2: Apply Network High-Load Tuning
+## Step 2: Minimal Network Stability Tuning
 
 ```bash
 cat << EOF | sudo tee -a /etc/sysctl.conf
 
-# Zettlab D6/D8 Ultra 10GbE stability tuning (r8169)
+# Zettlab D6/D8 Ultra 10GbE minimal stable tuning (r8169)
 net.core.netdev_max_backlog = 10000
 net.core.netdev_budget = 60000
 net.core.rps_sock_flow_entries = 32768
@@ -63,19 +63,24 @@ Expected output:
 driver: r8169
 ```
 
-Monitor packet drops (should stay at 0 even under load):
+## Samba Stability Note (Critical for Video Playback)
 
-```bash
-watch -n 2 'echo "=== enp88s0 ==="; ethtool -S enp88s0 | grep rx_missed; echo "=== enp89s0 ==="; ethtool -S enp89s0 | grep rx_missed'
+In `/etc/samba/smb.conf`, use:
+```conf
+smb encrypt = desired
 ```
+
+This setting, combined with the above network parameters, provides the best stability for 10GbE movie streaming on macOS and other clients.
 
 ## Optional: Trying the r8127 DKMS Driver
 
-Only recommended if you have a specific need for the r8127 driver. Most users on the Zettlab D6/D8 Ultra get better stability with the stock `r8169` driver.
+Only recommended if you have a specific need for the r8127 driver. Most users on the Zettlab D6/D8 Ultra get better long-term stability with the stock `r8169` driver.
 
 ## Troubleshooting
 
 | Issue                    | Resolution |
 |--------------------------|------------|
-| Still seeing disconnects | Verify `pcie_aspm.policy=performance` is active (`cat /proc/cmdline`) |
-| High `rx_missed` counters| Increase the sysctl values further or check cable/switch |
+| Movie hiccups / stuttering | Use `smb encrypt = desired` in Samba and ensure `pcie_aspm=off pcie_port_pm=off` |
+| Still seeing issues      | Verify parameters with `cat /proc/cmdline` and test with NFS instead of Samba |
+
+This configuration is the minimal stable setup after extensive testing on the Zettlab D6/D8 Ultra.
