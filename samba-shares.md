@@ -18,7 +18,7 @@ Tested with [storage-mergerfs-snapraid.md](storage-mergerfs-snapraid.md) and [bt
 All shares are read/write for your user only.
 
 **Important stability note for Zettlab D6/D8 Ultra:**  
-Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained playback while remaining compatible with macOS.
+Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained playback **and file listing** while remaining compatible with macOS.
 
 ---
 
@@ -75,12 +75,21 @@ Replace the entire file with:
    smb encrypt = desired
 
    # Performance for mergerfs/XFS + Realtek RTL8127 stability
-   socket options = TCP_NODELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+   socket options = TCP_NODELAY
    aio read size = 8192
    aio write size = 8192
    read raw = yes
    write raw = yes
    use sendfile = yes
+
+   # macOS + mergerfs file-listing optimization
+   vfs objects = fruit
+   fruit:metadata = netatalk
+   fruit:model = MacPro
+   fruit:encoding = native
+
+   # Reduce metadata storms during directory listing
+   stat cache = yes
 
 # === Home directory ===
 [homes]
@@ -102,6 +111,10 @@ Replace the entire file with:
    force group = %U
    valid users = %U
 
+   # Reduce metadata storms (important for file listing stability)
+   oplocks = no
+   level2 oplocks = no
+
 # === mergerfs pool share ===
 [pool]
    comment = Storage Pool (mergerfs + SnapRAID)
@@ -113,9 +126,11 @@ Replace the entire file with:
    force user = %U
    force group = %U
    valid users = %U
-```
 
-Save and exit.
+   # Reduce metadata storms (important for file listing stability)
+   oplocks = no
+   level2 oplocks = no
+```
 
 ---
 
@@ -203,5 +218,5 @@ sudo smbpasswd -a $(whoami)
 
 - Store important data in `/data` (btrbk replication) or `/mnt/pool` (SnapRAID).
 - SnapRAID and btrbk schedules are unaffected.
-- The socket options and aio settings above are tuned specifically for Realtek RTL8127 stability on this hardware.
+- The configuration is tuned specifically for Realtek RTL8127 stability on this hardware.
 - For remote access, use WireGuard or VPN.
