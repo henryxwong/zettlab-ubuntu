@@ -74,7 +74,7 @@ Replace the entire file with:
    server max protocol = SMB3
    smb encrypt = desired
 
-   # Performance for Realtek RTL8127 stability
+   # Performance for mergerfs/XFS + Realtek RTL8127 stability
    socket options = TCP_NODELAY SO_RCVBUF=8192 SO_SNDBUF=8192
    aio read size = 8192
    aio write size = 8192
