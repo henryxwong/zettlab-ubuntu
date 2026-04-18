@@ -4,7 +4,7 @@
 
 ## Overview
 
-The built-in Realtek RTL8127A (2.5 GbE) is sensitive to PCIe power management and CPU C-states during sustained sequential reads.  
+The built-in Realtek RTL8127A is sensitive to PCIe power management and CPU/iGPU C-states during sustained sequential reads.  
 The **stock in-kernel `r8169` driver** is the most stable option. The out-of-tree `r8127` DKMS driver frequently increases packet drops and stuttering on this hardware.
 
 **Tested symptoms resolved:** video hiccups over Samba, SSH session drops during light-to-medium load.
@@ -20,6 +20,12 @@ Enter BIOS (F2 at boot) and set the following:
 - C-State Un-demotion → **[C0]**
 - Package C-State Demotion → **[Disabled]**
 - Package C-State Un-demotion → **[Disabled]**
+- Race To Halt (RTH) → **[Disabled]**
+- C-State Pre-Wake → **[Disabled]**
+
+**GT/Media → Power Management Control**
+- RC6 (Render Standby) → **[Disabled]**
+- MC6 (Media Standby) → **[Disabled]**
 
 Save and exit (F10).
 
@@ -107,5 +113,5 @@ During video playback the counters should stay at zero and playback should be sm
 ## Notes
 
 - Do **not** install the r8127 DKMS driver — it worsens symptoms on this hardware.
-- BIOS changes slightly increase idle power (5–15 W) and fan activity.
+- BIOS changes slightly increase idle power and fan activity.
 - All changes are reversible in BIOS.
