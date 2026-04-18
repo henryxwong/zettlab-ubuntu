@@ -17,6 +17,9 @@ Tested with [storage-mergerfs-snapraid.md](storage-mergerfs-snapraid.md) and [bt
 
 All shares are read/write for your user only.
 
+**Important stability note for Zettlab D6/D8 Ultra:**  
+Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained 10GbE playback while remaining compatible with macOS.
+
 ---
 
 ## Prerequisites
@@ -66,10 +69,10 @@ Replace the entire file with:
    passwd program = /usr/bin/passwd %u
    passwd chat = *Enter\snew\s*\spassword:* %n\n *Retype\snew\s*\spassword:* %n\n *password\supdated\ssuccessfully*
 
-   # Modern SMB3 + mandatory encryption
+   # Modern SMB3 + encryption negotiation (required for macOS stability)
    server min protocol = SMB3
    server max protocol = SMB3
-   smb encrypt = required
+   smb encrypt = desired
 
    # Performance for 10GbE + mergerfs/XFS
    socket options = TCP_NODELAY SO_RCVBUF=65536 SO_SNDBUF=65536
@@ -156,12 +159,11 @@ You should see the shares: `homes`, `data`, and `pool`.
 
 ## Connect from Client Devices
 
-**Windows**  
-File Explorer → `\\ZETTLABNAS` or `\\IP-OF-NAS`  
-Login with your Ubuntu username and password.
-
 **macOS**  
 Finder → Go → Connect to Server → `smb://ZETTLABNAS` or `smb://IP-OF-NAS`
+
+**Windows**  
+File Explorer → `\\ZETTLABNAS` or `\\IP-OF-NAS`
 
 **Linux**
 ```bash
@@ -199,5 +201,5 @@ sudo smbpasswd -a $(whoami)
 
 - Store important data in `/data` (btrbk replication) or `/mnt/pool` (SnapRAID).
 - SnapRAID and btrbk schedules are unaffected.
-- SMB3 encryption is enforced. Use only on trusted networks.
+- `smb encrypt = desired` significantly improves 10GbE video playback stability on this hardware.
 - For remote access, use WireGuard or VPN.
