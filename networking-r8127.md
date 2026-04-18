@@ -7,7 +7,7 @@
 The built-in Realtek RTL8127A is sensitive to PCIe power management and CPU/iGPU C-states during sustained sequential reads.  
 The **stock in-kernel `r8169` driver** is the most stable option. The out-of-tree `r8127` DKMS driver frequently increases packet drops and stuttering on this hardware.
 
-**Tested symptoms resolved:** video hiccups over Samba, SSH session drops during light-to-medium load.
+**Tested symptoms resolved:** video hiccups over Samba, SSH session drops during light-to-medium load and file listing.
 
 ## BIOS Settings (Mandatory)
 
@@ -77,7 +77,7 @@ Apply:
 sudo sysctl -p
 ```
 
-## Step 3: Disable Problematic Offloads (Permanent)
+## Step 3: r8169 Stability Script
 
 ```bash
 sudo nano /etc/rc.local
@@ -101,14 +101,36 @@ sudo systemctl daemon-reload
 sudo systemctl start rc-local.service
 ```
 
+## Step 4: SSH Keepalive Settings (Recommended)
+
+To prevent "Broken pipe" errors during Samba file listing and heavy load:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Add at the bottom:
+
+```conf
+ClientAliveInterval 10
+ClientAliveCountMax 60
+TCPKeepAlive yes
+```
+
+Apply:
+
+```bash
+sudo systemctl restart sshd
+```
+
 ## Verification
 
 ```bash
 ethtool -i enp88s0 | grep driver   # must show r8169
-ethtool -S enp88s0 | grep -E 'error|drop|miss|queue'
+ethtool -S enp88s0 | grep -E 'error|drop|miss|queue|tx_timeout|rx_missed|rx_crc|rx_length'
 ```
 
-During video playback the counters should stay at zero and playback should be smooth with no SSH drops.
+During video playback or large directory listing the counters should stay at zero and playback/SSH should remain stable.
 
 ## Notes
 
