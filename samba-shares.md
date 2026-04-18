@@ -18,7 +18,7 @@ Tested with [storage-mergerfs-snapraid.md](storage-mergerfs-snapraid.md) and [bt
 All shares are read/write for your user only.
 
 **Important stability note for Zettlab D6/D8 Ultra:**  
-Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained 10GbE playback while remaining compatible with macOS.
+Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained playback while remaining compatible with macOS.
 
 ---
 
@@ -74,8 +74,10 @@ Replace the entire file with:
    server max protocol = SMB3
    smb encrypt = desired
 
-   # Performance for 10GbE + mergerfs/XFS
-   socket options = TCP_NODELAY SO_RCVBUF=65536 SO_SNDBUF=65536
+   # Performance for Realtek RTL8127 stability
+   socket options = TCP_NODELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+   aio read size = 8192
+   aio write size = 8192
    read raw = yes
    write raw = yes
    use sendfile = yes
@@ -201,5 +203,5 @@ sudo smbpasswd -a $(whoami)
 
 - Store important data in `/data` (btrbk replication) or `/mnt/pool` (SnapRAID).
 - SnapRAID and btrbk schedules are unaffected.
-- `smb encrypt = desired` significantly improves 10GbE video playback stability on this hardware.
+- The socket options and aio settings above are tuned specifically for Realtek RTL8127 stability on this hardware.
 - For remote access, use WireGuard or VPN.

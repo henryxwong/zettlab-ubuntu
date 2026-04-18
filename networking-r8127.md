@@ -1,15 +1,29 @@
-# Realtek RTL8127 10GbE Networking Configuration (Zettlab D6/D8 Ultra)
+# Realtek RTL8127 Networking Stability Guide (Zettlab D6/D8 Ultra)
 
-> Recommended stable setup using the **stock in-kernel r8169 driver**
+> Stable configuration for Samba / mergerfs video playback on Zettlab D6/D8 Ultra running Ubuntu 26.04.
 
 ## Overview
 
-On the Zettlab D6/D8 Ultra, the **stock `r8169` driver** has proven significantly more stable than the third-party `r8127` DKMS driver for sustained video streaming and general use.  
-It eliminates the random disconnects and packet drops that many users experience with r8127 (especially under light-to-medium load).
+The built-in Realtek RTL8127A (2.5 GbE) is sensitive to PCIe power management and CPU C-states during sustained sequential reads.  
+The **stock in-kernel `r8169` driver** is the most stable option. The out-of-tree `r8127` DKMS driver frequently increases packet drops and stuttering on this hardware.
 
-**Recommendation:** Use the built-in `r8169` driver + the minimal stability tunings below.
+**Tested symptoms resolved:** video hiccups over Samba, SSH session drops during light-to-medium load.
 
-## Step 1: Required Kernel Parameters
+## BIOS Settings (Mandatory)
+
+Enter BIOS (F2 at boot) and set the following:
+
+**CPU → Power Management Control**
+- PCIe Gen Speed Downgrade → **[Disabled]**
+- Package C-State Limit → **[C1]**
+- C-State Auto Demotion → **[C0]**
+- C-State Un-demotion → **[C0]**
+- Package C-State Demotion → **[Disabled]**
+- Package C-State Un-demotion → **[Disabled]**
+
+Save and exit (F10).
+
+## Step 1: Kernel Parameters
 
 Edit GRUB configuration:
 
@@ -17,70 +31,81 @@ Edit GRUB configuration:
 sudo nano /etc/default/grub
 ```
 
-Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to include:
+Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to:
 
 ```bash
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash pcie_aspm=off pcie_port_pm=off"
 ```
 
-Apply the changes:
+Apply:
 
 ```bash
 sudo update-grub
 ```
 
-## Step 2: Minimal Network Stability Tuning
+## Step 2: Strong Network Stack Tuning
 
 ```bash
-cat << EOF | sudo tee -a /etc/sysctl.conf
+sudo nano /etc/sysctl.conf
+```
 
-# Zettlab D6/D8 Ultra 10GbE minimal stable tuning (r8169)
-net.core.netdev_max_backlog = 10000
-net.core.netdev_budget = 60000
-net.core.rps_sock_flow_entries = 32768
-EOF
+Add/replace with:
 
+```conf
+# Zettlab D6/D8 Ultra – aggressive stability tuning (r8169)
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.netdev_max_backlog = 25000
+net.core.netdev_budget = 80000
+net.core.rps_sock_flow_entries = 65536
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.tcp_mem = 16777216 25165824 33554432
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_mtu_probing = 1
+```
+
+Apply:
+
+```bash
 sudo sysctl -p
 ```
 
-## Step 3: Reboot
+## Step 3: Disable Problematic Offloads (Permanent)
 
 ```bash
-sudo reboot
+sudo nano /etc/rc.local
+```
+
+Replace content with:
+
+```bash
+#!/bin/bash
+# Zettlab D6/D8 Ultra – r8169 stability fixes
+for nic in enp88s0 enp89s0; do
+    ethtool -K $nic tso off gso off gro on 2>/dev/null || true
+done
+```
+
+Make executable and enable:
+
+```bash
+sudo chmod +x /etc/rc.local
+sudo systemctl daemon-reload
+sudo systemctl start rc-local.service
 ```
 
 ## Verification
 
-After reboot, confirm you are using the stock driver:
-
 ```bash
-ethtool -i enp88s0 | grep driver
-ethtool -i enp89s0 | grep driver
+ethtool -i enp88s0 | grep driver   # must show r8169
+ethtool -S enp88s0 | grep -E 'error|drop|miss|queue'
 ```
 
-Expected output:
-```
-driver: r8169
-```
+During video playback the counters should stay at zero and playback should be smooth with no SSH drops.
 
-## Samba Stability Note (Critical for Video Playback)
+## Notes
 
-In `/etc/samba/smb.conf`, use:
-```conf
-smb encrypt = desired
-```
-
-This setting, combined with the above network parameters, provides the best stability for 10GbE movie streaming on macOS and other clients.
-
-## Optional: Trying the r8127 DKMS Driver
-
-Only recommended if you have a specific need for the r8127 driver. Most users on the Zettlab D6/D8 Ultra get better long-term stability with the stock `r8169` driver.
-
-## Troubleshooting
-
-| Issue                    | Resolution |
-|--------------------------|------------|
-| Movie hiccups / stuttering | Use `smb encrypt = desired` in Samba and ensure `pcie_aspm=off pcie_port_pm=off` |
-| Still seeing issues      | Verify parameters with `cat /proc/cmdline` and test with NFS instead of Samba |
-
-This configuration is the minimal stable setup after extensive testing on the Zettlab D6/D8 Ultra.
+- Do **not** install the r8127 DKMS driver — it worsens symptoms on this hardware.
+- BIOS changes slightly increase idle power (5–15 W) and fan activity.
+- All changes are reversible in BIOS.
