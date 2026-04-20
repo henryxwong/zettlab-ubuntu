@@ -75,10 +75,10 @@ Save as `/usr/local/sbin/cpu-fan-curve.sh`:
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_CPU_C=51          # Ideal CPU temperature target (°C)
-MIN_SAFE_PWM=70          # Absolute minimum PWM (do not go lower or fans may stall)
-MAX_SAFE_TEMP_C=85       # Emergency full speed if smoothed temperature exceeds this
-GAIN_TENTHS=18           # Proportional gain ×10 (18 = 1.8)
+TARGET_CPU_C=50          # Ideal CPU temperature target (°C)
+MIN_SAFE_PWM=65          # Absolute minimum PWM (do not go lower or fans may stall)
+MAX_SAFE_TEMP_C=88       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=32           # Proportional gain ×10
 
 # Asymmetric response & timer-based anti-chatter
 RISE_EMA_HUNDREDTHS=25   # Faster response when temperature is rising
@@ -228,10 +228,10 @@ Save as `/usr/local/sbin/hdd-fan-curve.sh`:
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_HDD_C=41          # Ideal maximum HDD temperature (°C)
-MIN_SAFE_PWM=60          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=60       # Emergency full speed if smoothed temperature exceeds this
-GAIN_TENTHS=22           # Proportional gain ×10 (22 = 2.2)
+TARGET_HDD_C=40          # Ideal maximum HDD temperature (°C)
+MIN_SAFE_PWM=58          # Absolute minimum PWM for disk fans
+MAX_SAFE_TEMP_C=63       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=45           # Proportional gain ×10
 
 # Asymmetric response & timer-based anti-chatter
 RISE_EMA_HUNDREDTHS=35   # Faster response when temperature is rising
