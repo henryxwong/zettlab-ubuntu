@@ -129,50 +129,22 @@ sudo btrbk stats
 
 ---
 
-## Step 6: Set up automatic daily replication (consistent with SnapRAID)
+## Step 6: Enable automatic daily replication
 
-Create a small wrapper script so the cron job is consistent with the SnapRAID maintenance script.
+The `btrbk` package already provides a ready-to-use systemd timer (`btrbk.timer`) that runs `btrbk run` once per day.
 
-```bash
-sudo nano /usr/local/bin/btrbk-run.sh
-```
-
-**Paste the following content:**
+Enable and start it:
 
 ```bash
-#!/bin/bash
-# btrbk wrapper script for scheduled execution
-
-LOG=/var/log/btrbk.log
-echo "=== btrbk replication started at $(date) ===" >> $LOG
-/usr/bin/btrbk run >> $LOG 2>&1
-echo "=== btrbk replication finished at $(date) ===" >> $LOG
+sudo systemctl daemon-reload
+sudo systemctl enable --now btrbk.timer
 ```
 
-Make the script executable:
+**Verify the timer:**
 
 ```bash
-sudo chmod +x /usr/local/bin/btrbk-run.sh
-```
-
-Now add the cron job:
-
-```bash
-sudo crontab -e
-```
-
-Add this line (runs at 04:00 every day, one hour after SnapRAID):
-
-```
-0 4 * * * /usr/local/bin/btrbk-run.sh
-```
-
-Save and exit the editor.
-
-Verify the cron job:
-
-```bash
-sudo crontab -l
+systemctl list-timers | grep btrbk
+systemctl status btrbk.timer
 ```
 
 ---
@@ -197,12 +169,9 @@ sudo btrbk clean
 
 ### Check logs
 ```bash
-cat /var/log/btrbk.log
-sudo journalctl -u btrbk -e
+sudo journalctl -u btrbk.service -e
 ```
 
-### Edit retention later
-Edit `/etc/btrbk/btrbk.conf` and run `sudo btrbk run`.
 
 ---
 
@@ -216,7 +185,7 @@ Edit `/etc/btrbk/btrbk.conf` and run `sudo btrbk run`.
 2. Restore a specific snapshot (example):
    ```bash
    # Restore to a new subvolume
-   sudo btrfs receive -f /mnt/parity/replicas/data/@data-YYYY-MM-DD_... /data-restored
+   sudo btrfs receive -f /mnt/parity/replicas/data/data.2026XXXX /data-restored
    ```
 
 ---
@@ -227,3 +196,4 @@ Edit `/etc/btrbk/btrbk.conf` and run `sudo btrbk run`.
 - Snapshots live in `/mnt/parity/replicas/data` — they are **not** part of the SnapRAID parity file.
 - Store all important data inside `/data` for automatic protection.
 - Replication is incremental and very fast after the first run.
+- The packaged `btrbk.timer` provides reliable daily execution without any custom cron jobs or wrapper scripts.
