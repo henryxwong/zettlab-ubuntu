@@ -17,6 +17,9 @@ Tested with [storage-mergerfs-snapraid.md](storage-mergerfs-snapraid.md) and [bt
 
 All shares are read/write for your user only.
 
+**macOS users**  
+This guide now includes full `.DS_Store` prevention (both client-side and server-side) and modern `fruit` VFS settings for optimal Finder performance, metadata handling, and zero macOS clutter on your NAS.
+
 **Important stability note for Zettlab D6/D8 Ultra:**  
 Use `smb encrypt = desired` (not `required`). This significantly improves stability and greatly reduces movie stuttering and SSH drops during sustained playback **and file listing** while remaining compatible with macOS.
 
@@ -46,7 +49,7 @@ sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
 sudo nano /etc/samba/smb.conf
 ```
 
-Replace the entire file with:
+Replace the entire file with the following updated configuration:
 
 ```conf
 # =============================================
@@ -82,11 +85,19 @@ Replace the entire file with:
    write raw = yes
    use sendfile = yes
 
-   # macOS + mergerfs file-listing optimization
-   vfs objects = fruit
-   fruit:metadata = netatalk
-   fruit:model = MacPro
-   fruit:encoding = native
+   # === Modern macOS compatibility (fruit VFS) ===
+   vfs objects = fruit streams_xattr
+   fruit:metadata = stream
+   fruit:model = MacSamba
+   fruit:posix_rename = yes
+   fruit:zero_file_id = yes
+   fruit:wipe_intentionally_left_blank_rfork = yes
+   fruit:delete_empty_adfiles = yes
+   fruit:nfs_aces = no
+
+   # Stop macOS clutter (.DS_Store and AppleDouble files) at the server level
+   veto files = /._*/.DS_Store/
+   delete veto files = yes
 
    # Reduce metadata storms during directory listing
    stat cache = yes
@@ -174,6 +185,39 @@ You should see the shares: `homes`, `data`, and `pool`.
 
 ---
 
+## macOS Optimization & .DS_Store Prevention
+
+### Client-side (on every Mac that connects)
+This is the most effective way to stop macOS from creating `.DS_Store` files:
+
+1. Open **Terminal** on your Mac and run:
+   ```bash
+   defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
+   ```
+
+2. Force Finder to reload the setting:
+   ```bash
+   killall Finder
+   ```
+
+3. **Verify the setting**:
+   ```bash
+   defaults read com.apple.desktopservices DSDontWriteNetworkStores
+   ```
+   It should return `1`.
+
+### Server-side protection (already included in the config above)
+The new `veto files` + `delete veto files` rules will automatically block and delete any `.DS_Store` or `._*` files that still slip through.
+
+### One-time cleanup (run after updating Samba)
+```bash
+sudo find /mnt/pool -name ".DS_Store" -delete
+sudo find /mnt/pool -name "._*" -delete
+sudo find /data -name ".DS_Store" -delete 2>/dev/null || true
+```
+
+---
+
 ## Connect from Client Devices
 
 **macOS**  
@@ -220,3 +264,5 @@ sudo smbpasswd -a $(whoami)
 - SnapRAID and btrbk schedules are unaffected.
 - The configuration is tuned specifically for Realtek RTL8127 stability on this hardware.
 - For remote access, use WireGuard or VPN.
+- The `fruit` VFS module + veto rules ensure a clean, macOS-friendly experience with **zero `.DS_Store` pollution**.
+- After applying the changes, test by creating a new folder from your Mac and running `find /mnt/pool -name ".DS_Store" -mmin -5` on the NAS — it should return nothing.
