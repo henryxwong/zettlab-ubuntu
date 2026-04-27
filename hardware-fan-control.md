@@ -76,10 +76,10 @@ Key parameters (edit in the script):
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `TARGET_CPU_C` | 50 | Ideal CPU temperature target (°C) |
+| `TARGET_CPU_C` | 54 | Ideal CPU temperature target (°C) |
 | `MIN_SAFE_PWM` | 65 | Absolute minimum PWM (fans may stall below this) |
-| `MAX_SAFE_TEMP_C` | 88 | Emergency full speed if smoothed temp exceeds this |
-| `GAIN_TENTHS` | 32 | Proportional gain × 10 |
+| `MAX_SAFE_TEMP_C` | 95 | Emergency full speed if smoothed temp exceeds this |
+| `GAIN_TENTHS` | 20 | Proportional gain × 10 |
 | `RISE_EMA_HUNDREDTHS` | 25 | Faster response when temperature rising |
 | `FALL_EMA_HUNDREDTHS` | 8 | Slower response when temperature falling |
 | `HOLD_TIME_AFTER_UP_SECS` | 90 | Minimum seconds to hold PWM after upward change |
@@ -120,10 +120,10 @@ Key parameters (edit in the script):
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `TARGET_HDD_C` | 40 | Ideal maximum HDD temperature (°C) |
+| `TARGET_HDD_C` | 44 | Ideal maximum HDD temperature (°C) |
 | `MIN_SAFE_PWM` | 58 | Absolute minimum PWM for disk fans |
-| `MAX_SAFE_TEMP_C` | 63 | Emergency full speed if smoothed temp exceeds this |
-| `GAIN_TENTHS` | 45 | Proportional gain × 10 |
+| `MAX_SAFE_TEMP_C` | 65 | Emergency full speed if smoothed temp exceeds this |
+| `GAIN_TENTHS` | 32 | Proportional gain × 10 |
 | `RISE_EMA_HUNDREDTHS` | 35 | Faster response when temperature rising |
 | `FALL_EMA_HUNDREDTHS` | 10 | Slower response when temperature falling |
 | `HOLD_TIME_AFTER_UP_SECS` | 120 | Minimum seconds to hold PWM after upward change |
@@ -222,7 +222,7 @@ sudo journalctl -u cpu-fan-curve.service | grep -c "apply_pwm"
 After 24–48 hours of mixed load you should see very few downward PWM changes — this is normal and desired.
 
 **Optional fine-tuning**  
-If your CPU consistently idles 2–3 °C above the target you prefer, edit `/usr/local/sbin/cpu-fan-curve.sh` and lower `TARGET_CPU_C` from `50` to `48`. No other values need changing.
+If your CPU consistently idles 2–3 °C above the target you prefer, edit `/usr/local/sbin/cpu-fan-curve.sh` and adjust `TARGET_CPU_C`. No other values need changing.
 
 ## Safety Notes
 

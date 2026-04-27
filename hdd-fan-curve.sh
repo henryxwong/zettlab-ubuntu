@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_HDD_C=40          # Ideal maximum HDD temperature (°C)
+TARGET_HDD_C=44          # Ideal maximum HDD temperature (°C)
 MIN_SAFE_PWM=58          # Absolute minimum PWM for disk fans
-MAX_SAFE_TEMP_C=63       # Emergency full speed if smoothed temperature exceeds this
-GAIN_TENTHS=45           # Proportional gain ×10
+MAX_SAFE_TEMP_C=65       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=32           # Proportional gain ×10
 
 # Asymmetric response & timer-based anti-chatter
 RISE_EMA_HUNDREDTHS=35   # Faster response when temperature is rising

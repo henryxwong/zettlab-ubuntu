@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # ================== USER-CONFIGURABLE SETTINGS ==================
-TARGET_CPU_C=50          # Ideal CPU temperature target (°C)
+TARGET_CPU_C=54          # Ideal CPU temperature target (°C)
 MIN_SAFE_PWM=65          # Absolute minimum PWM (do not go lower or fans may stall)
-MAX_SAFE_TEMP_C=88       # Emergency full speed if smoothed temperature exceeds this
-GAIN_TENTHS=32           # Proportional gain ×10
+MAX_SAFE_TEMP_C=95       # Emergency full speed if smoothed temperature exceeds this
+GAIN_TENTHS=20           # Proportional gain ×10
 
 # Asymmetric response & timer-based anti-chatter
 RISE_EMA_HUNDREDTHS=25   # Faster response when temperature is rising
