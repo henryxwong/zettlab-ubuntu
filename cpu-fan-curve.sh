@@ -11,6 +11,7 @@ GAIN_TENTHS=32           # Proportional gain ×10
 RISE_EMA_HUNDREDTHS=25   # Faster response when temperature is rising
 FALL_EMA_HUNDREDTHS=8    # Much slower response when temperature is falling
 HOLD_TIME_AFTER_UP_SECS=90    # Minimum seconds to hold PWM after any upward change
+SLEEP_SECS=6             # Interval between temperature readings (seconds)
 # ============================================================
 
 find_hwmon_by_name() {
@@ -31,8 +32,6 @@ CPU_HWMON=$(find_hwmon_by_name "coretemp") || exit 1
 TEMP_INPUT="$CPU_HWMON/temp1_input"
 PWM_ENABLE="$ZETTLAB_HWMON/pwm3_enable"
 PWM_OUTPUT="$ZETTLAB_HWMON/pwm3"
-
-SLEEP_SECS=6
 
 read_temp_c() {
     local temp_milli

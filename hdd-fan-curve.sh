@@ -11,6 +11,7 @@ GAIN_TENTHS=45           # Proportional gain ×10
 RISE_EMA_HUNDREDTHS=35   # Faster response when temperature is rising
 FALL_EMA_HUNDREDTHS=10   # Much slower response when temperature is falling
 HOLD_TIME_AFTER_UP_SECS=120   # Minimum seconds to hold PWM after any upward change
+SLEEP_SECS=20            # Interval between temperature readings (seconds)
 # ============================================================
 
 find_hwmon_by_name() {
@@ -36,7 +37,6 @@ for dev in /dev/sd[a-h]; do
 done
 
 PWM_OUTPUTS=("$ZETTLAB_HWMON/pwm1" "$ZETTLAB_HWMON/pwm2")
-SLEEP_SECS=20
 
 read_drive_temp() {
     local drive=$1 temp

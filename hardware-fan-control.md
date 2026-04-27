@@ -83,6 +83,7 @@ Key parameters (edit in the script):
 | `RISE_EMA_HUNDREDTHS` | 25 | Faster response when temperature rising |
 | `FALL_EMA_HUNDREDTHS` | 8 | Slower response when temperature falling |
 | `HOLD_TIME_AFTER_UP_SECS` | 90 | Minimum seconds to hold PWM after upward change |
+| `SLEEP_SECS` | 6 | Interval between temperature readings (seconds) |
 
 ### Installation
 
@@ -126,6 +127,7 @@ Key parameters (edit in the script):
 | `RISE_EMA_HUNDREDTHS` | 35 | Faster response when temperature rising |
 | `FALL_EMA_HUNDREDTHS` | 10 | Slower response when temperature falling |
 | `HOLD_TIME_AFTER_UP_SECS` | 120 | Minimum seconds to hold PWM after upward change |
+| `SLEEP_SECS` | 20 | Interval between temperature readings (seconds) |
 
 The script automatically detects all SATA drives (/dev/sd[a-h]) and monitors the maximum temperature.
 
