@@ -10,6 +10,10 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 
 **Acknowledgement:** This guide was made possible with testing and feedback from Speedster and Daisan on the Zettlab Discord.
 
+## Credits & Attribution
+
+- **Fan control kernel module** (`zettlab-d8-fans`): Developed by [haveacry](https://github.com/haveacry) — [zettlab-d8-fans](https://github.com/haveacry/zettlab-d8-fans). The module is provided without an explicit license and is used here with attribution.
+
 ---
 
 ## Hardware Specifications
