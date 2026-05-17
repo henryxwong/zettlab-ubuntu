@@ -56,12 +56,8 @@ Test audio output with a simple sine wave:
 speaker-test -t sine -f 1000 -l 3
 ```
 
-This should play a 1kHz tone through the default output device for a few seconds.
-
 You can also test with a short audio file:
 
 ```bash
 paplay /usr/share/sounds/sound-icons/trumpet-12.wav
 ```
-
-(If the file doesn't exist, install `sound-icons` or use any `.wav` file.)

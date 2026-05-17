@@ -2,22 +2,22 @@
 
 > Configures XFS data disks with Btrfs parity disk, using mergerfs for pooling and SnapRAID for backup on Zettlab D6/D8 Ultra NAS.
 
-## Overview
+## Disk Layout Assumptions
 
-**Disk Assumptions:**
-- `/dev/sda` to `/dev/sde`: **5 data disks**
-- `/dev/sdf`: **dedicated parity disk**
+| Disks          | Role              | Filesystem |
+|----------------|-------------------|------------|
+| `/dev/sda`–`/dev/sde` | 5× Data disks     | XFS        |
+| `/dev/sdf`     | Dedicated parity  | Btrfs      |
 
-> **Important**: Device names (`/dev/sdX`) are not persistent and may change after reboots. Always verify with `lsblk` and use UUIDs in `/etc/fstab`.
+> **Important**: Device names (`/dev/sdX`) are not persistent. Always verify with `lsblk` and use UUIDs in `/etc/fstab`.
 
-**Filesystem Configuration:**
-- **Data disks**: XFS (optimal performance; no 16 TB file-size limit)
-- **Parity disk**: Btrfs (enables snapshot-based replication with `btrfs send | receive`)
+## Directory Structure
 
-**Directory Structure:**
-- `/mnt/disk1` – `/mnt/disk5`: Individual data disks
-- `/mnt/parity`: Parity disk
-- `/mnt/pool`: mergerfs pooled mount point
+| Mount Point     | Purpose                          |
+|-----------------|----------------------------------|
+| `/mnt/disk1`–`/mnt/disk5` | Individual data disks       |
+| `/mnt/parity`   | Btrfs parity disk                |
+| `/mnt/pool`     | mergerfs pooled storage          |
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ sudo ls /dev/disk/by-id/
 ### Step 2: Format Disks
 
 ```bash
-# Data disks (XFS – recommended)
+# Data disks (XFS)
 for dev in sda sdb sdc sdd sde; do
     sudo wipefs -af /dev/$dev
     sudo parted -s /dev/$dev mklabel gpt
@@ -45,7 +45,7 @@ for dev in sda sdb sdc sdd sde; do
     sudo mkfs.xfs -f -L disk${dev: -1} /dev/${dev}1
 done
 
-# Parity disk (Btrfs – recommended for snapshots)
+# Parity disk (Btrfs)
 sudo wipefs -af /dev/sdf
 sudo parted -s /dev/sdf mklabel gpt
 sudo parted -s /dev/sdf mkpart primary 0% 100%
@@ -66,9 +66,9 @@ Obtain UUIDs:
 sudo blkid
 ```
 
-Add entries to `/etc/fstab` using UUIDs:
+Add entries to `/etc/fstab`:
 
-```
+```bash
 # Data disks (XFS)
 UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx /mnt/disk1 xfs defaults,noatime 0 2
 UUID=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy /mnt/disk2 xfs defaults,noatime 0 2
@@ -90,16 +90,16 @@ df -h | grep -E 'disk|parity|pool'
 
 ## Software Installation
 
-### Step 1: Install SnapRAID
+### Install SnapRAID
 
 ```bash
 sudo apt update
 sudo apt install snapraid -y
 ```
 
-### Step 2: Install mergerfs
+### Install mergerfs
 
-Check for latest release at https://github.com/trapexit/mergerfs/releases
+Check latest release at: https://github.com/trapexit/mergerfs/releases
 
 ```bash
 cd /tmp
@@ -110,15 +110,15 @@ mergerfs -V
 
 ## Pool Configuration
 
-### Step 1: Configure mergerfs in fstab
+### Configure mergerfs in fstab
 
-Add the following line to `/etc/fstab`:
+Add this line to `/etc/fstab`:
 
-```
+```bash
 /mnt/disk* /mnt/pool fuse.mergerfs defaults,nonempty,allow_other,use_ino,cache.files=off,moveonenospc=true,dropcacheonclose=true,minfreespace=20G,category.create=epmfs,fsname=mergerfs,x-systemd.requires-mounts-for=/mnt/disk1,x-systemd.requires-mounts-for=/mnt/disk2,x-systemd.requires-mounts-for=/mnt/disk3,x-systemd.requires-mounts-for=/mnt/disk4,x-systemd.requires-mounts-for=/mnt/disk5 0 0
 ```
 
-### Step 2: Mount Pool
+### Mount the Pool
 
 ```bash
 sudo systemctl daemon-reload
@@ -128,19 +128,16 @@ ls /mnt/pool
 
 ### mergerfs Policy Reference
 
-| Policy | Description |
-|--------|-------------|
-| **epmfs** (default) | Existing-path most-free-space; preserves directory path |
-| eplfs | Existing-path least-free-space |
-| mfs | Most-free-space (always picks disk with most space) |
-| ff | First-found (creates on first disk with space) |
+| Policy | Description                              |
+|--------|------------------------------------------|
+| `epmfs` (default) | Existing-path most-free-space           |
+| `eplfs` | Existing-path least-free-space           |
+| `mfs`   | Most-free-space                          |
+| `ff`    | First-found                              |
 
-To change policy, edit the mergerfs line in `/etc/fstab` and run:
-```bash
-sudo systemctl daemon-reload && sudo mount -a
-```
+To change policy, edit the line in `/etc/fstab` and run `sudo mount -a`.
 
-## Parity File Configuration
+## Parity File Setup
 
 ```bash
 sudo mount -a
@@ -148,7 +145,7 @@ sudo mount -a
 # Create parity file on Btrfs root
 sudo touch /mnt/parity/snapraid.parity
 
-# Disable CoW on parity file to prevent fragmentation
+# Disable CoW on parity file
 sudo chattr +C /mnt/parity/snapraid.parity
 
 # Verify
@@ -161,13 +158,13 @@ lsattr /mnt/parity/snapraid.parity   # should show "C"
 sudo nano /etc/snapraid.conf
 ```
 
-Configuration file:
+**Configuration file content:**
 
-```
+```conf
 # Parity
 parity /mnt/parity/snapraid.parity
 
-# Content files (for quick content listing)
+# Content files
 content /var/snapraid.content
 content /mnt/disk1/.snapraid.content
 content /mnt/disk2/.snapraid.content
@@ -206,7 +203,7 @@ sudo snapraid -c /etc/snapraid.conf sync
 sudo nano /usr/local/bin/snapraid-maintenance.sh
 ```
 
-Script content:
+**Script content:**
 
 ```bash
 #!/bin/bash
@@ -223,13 +220,14 @@ Make executable:
 sudo chmod +x /usr/local/bin/snapraid-maintenance.sh
 ```
 
-### Schedule Maintenance
+### Schedule Maintenance (cron)
 
 ```bash
 sudo crontab -e
 ```
 
-Add cron entry:
+Add:
 
-```
+```cron
 0 3 * * * /usr/local/bin/snapraid-maintenance.sh
+```

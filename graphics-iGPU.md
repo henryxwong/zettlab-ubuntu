@@ -5,6 +5,7 @@
 ## Overview
 
 This guide enables:
+
 - Hardware video decoding/encoding (VA-API / Quick Sync)
 - OpenCL and oneAPI Level Zero compute runtime
 - Full access to `/dev/dri/renderD*` device nodes
@@ -57,15 +58,13 @@ sudo reboot
 
 ## Verification
 
-After reboot, run the following verification commands:
-
 ### Compute Runtime (OpenCL + Level Zero)
 
 ```bash
 clinfo | grep -E "Platform|Device Name|Version"
 ```
 
-Expected: Intel platform with Arc Graphics / Meteor Lake device
+Expected: Intel platform with Arc Graphics / Meteor Lake device.
 
 ### Hardware Video Acceleration (Quick Sync)
 
@@ -73,7 +72,7 @@ Expected: Intel platform with Arc Graphics / Meteor Lake device
 vainfo | grep -E "Driver|Profile"
 ```
 
-Expected: Driver: Intel iHD driver
+Expected: Driver: Intel iHD driver.
 
 ### GPU Device Nodes
 
@@ -81,10 +80,11 @@ Expected: Driver: Intel iHD driver
 ls -l /dev/dri/
 ```
 
-Expected: `card0` and `renderD128` present
+Expected: `card0` and `renderD128` present.
 
 ## Optional: Real-time GPU Monitor
 
 ```bash
 sudo apt install -y intel-gpu-tools
 intel_gpu_top
+```

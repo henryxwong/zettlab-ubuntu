@@ -39,18 +39,17 @@ Download Ubuntu Server 26.04 ISO and write to USB using Rufus, balenaEtcher, or 
 1. Insert USB drive and power on
 2. Press **F12** to open boot menu; select USB drive
 3. At GRUB menu, highlight Ubuntu Server entry and press **E**
-4. Add the `video=eDP-1:d` parameter at the end of the `linux` line.
+4. Add the `video=eDP-1:d` parameter at the end of the `linux` line
 
-See the full recommended kernel parameters in **[Kernel Parameters Reference](kernel-parameters.md)**.
+See the full list of recommended kernel parameters in **[Kernel Parameters Reference](kernel-parameters.md)**.
 
 ### Step 3: Install Ubuntu (Btrfs recommended)
 
-**Strongly recommended:** Format the root filesystem (`/`) as **Btrfs**.  
-This enables native subvolumes, snapshots, and incremental replication.
+**Strongly recommended:** Format the root filesystem (`/`) as **Btrfs**. This enables native subvolumes, snapshots, and incremental replication.
 
 During the installer:
 - Select **Guided storage layout**
-- Choose **Btrfs** as the filesystem for the root partition (Ubuntu 26.04 installer fully supports Btrfs root)
+- Choose **Btrfs** as the filesystem for the root partition
 - Install Ubuntu on a different drive than the original ZettOS NVMe (recommended: secondary NVMe SSD)
 - Create user account
 - Complete installation and reboot
@@ -68,13 +67,13 @@ sudo apt install lm-sensors smartmontools curl git btrbk -y
 
 After installation, create a dedicated `/data` subvolume and set up automatic snapshot replication to your Btrfs parity disk.
 
-→ Follow the **[Btrfs Data Replication Guide](btrfs-data-replication.md)** for full instructions (includes btrbk configuration, retention policy, and daily cron).
+→ Follow the **[Btrfs Data Replication Guide](btrfs-data-replication.md)** for full instructions.
 
 ## Known Hardware Support in Ubuntu 26.04
 
-| Component | Status |
-|-----------|--------|
-| Fans | Fully supported via `zettlab_d8_fans` DKMS module |
-| Front LCD | Connected as `eDP-1`; disabled during live boot with kernel parameter |
-| Networking (RTL8127) | Works out-of-the-box; use r8127 DKMS driver for optimal stability |
-| CPU | Intel Core Ultra 5 125H; PL1/PL2 locked at 45 W / 93 W |
+| Component   | Status                                      |
+|-------------|---------------------------------------------|
+| Fans        | Fully supported via `zettlab_d8_fans` DKMS module |
+| Front LCD   | Connected as `eDP-1`; disabled during live boot with kernel parameter |
+| Networking  | Realtek RTL8127 — use USB-C Ethernet adapter (onboard NIC unstable) |
+| CPU         | Intel Core Ultra 5 125H; PL1/PL2 locked at 45 W / 93 W |
