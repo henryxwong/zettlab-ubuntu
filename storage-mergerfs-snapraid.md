@@ -231,3 +231,38 @@ Add:
 ```cron
 0 3 * * * /usr/local/bin/snapraid-maintenance.sh
 ```
+
+## Known Issues & Limitations
+
+> **Important**: mergerfs is known to have stability issues, especially when combined with Samba. The following problems have been reported by multiple users.
+
+### Documented Problems
+
+| Issue                          | Severity | Description                                                                 | Mitigation Used |
+|--------------------------------|----------|-----------------------------------------------------------------------------|-----------------|
+| **SMB rename/create failures** | Medium   | Creating or renaming folders/files over Samba can fail or behave incorrectly | `oplocks = no` |
+| **Long-term segfaults**        | Medium   | Occasional crashes after running for days or weeks                          | None (monitor logs) |
+| **Directory listing performance** | Medium | Slow or broken listings, especially with macOS clients                     | `oplocks = no`, `stat cache = yes` |
+| **Metadata / VFS conflicts**   | Low–Medium | `fruit` module + mergerfs can cause unexpected behavior                     | Current Samba config |
+| **Caching edge cases**         | Low      | Problems with certain cache-related options under heavy load                | `cache.files=off`, `dropcacheonclose=true` |
+
+### Current Mitigations in This Guide
+
+- `oplocks = no` and `level2 oplocks = no` on `[data]` and `[pool]`
+- `smb encrypt = desired`
+- `cache.files=off`
+- `dropcacheonclose=true`
+- `minfreespace=20G`
+- `stat cache = yes` in global Samba config
+
+These settings significantly reduce (but do not completely eliminate) the known issues.
+
+### Recommendation
+
+If you experience frequent problems with file operations or random crashes, consider monitoring mergerfs logs and be prepared to restart the service periodically:
+
+```bash
+sudo systemctl restart mergerfs
+```
+
+For maximum stability, some users eventually move away from mergerfs in favor of native ZFS or simple bind mounts.
