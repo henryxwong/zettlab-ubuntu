@@ -8,11 +8,10 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 
 **⚠ Disclaimer:** All information is provided as-is. Test thoroughly before applying to production systems. Always backup data before making system changes.
 
-**Acknowledgement:** This guide was made possible with testing and feedback from Speedster and Daisan on the Zettlab Discord.
+## Credits & Acknowledgements
 
-## Credits & Attribution
-
-- **Fan control kernel module** (`zettlab-d8-fans`): Developed by [haveacry](https://github.com/haveacry) — [zettlab-d8-fans](https://github.com/haveacry/zettlab-d8-fans). The module is provided without an explicit license and is used here with attribution.
+- **Community Testing & Feedback**: Speedster and Daisan on the Zettlab Discord
+- **Fan Control Kernel Module** (`zettlab-d8-fans`): Developed by [haveacry](https://github.com/haveacry) — [zettlab-d8-fans](https://github.com/haveacry/zettlab-d8-fans). The module is provided without an explicit license and is used here with attribution.
 
 ---
 
