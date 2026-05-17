@@ -1,69 +1,35 @@
-# Realtek RTL8127 Networking Stability Guide (Zettlab D6/D8 Ultra)
+# Realtek RTL8127 Networking – Current Status (Zettlab D6/D8 Ultra)
 
-> Stable configuration for Samba / mergerfs video playback on Zettlab D6/D8 Ultra running Ubuntu 26.04.
+> **Update (May 2026):** The onboard Realtek RTL8127 NIC remains unstable even with extensive tuning and the out-of-tree `r8127` driver. After repeated packet drops, stuttering during Samba playback, and SSH disconnects, the onboard NIC has been abandoned.
 
-## Overview
+## Current Recommendation
 
-The built-in Realtek RTL8127A is sensitive to PCIe power management and CPU/iGPU C-states during sustained sequential reads.  
-The **stock in-kernel `r8169` driver** is the most stable option. The out-of-tree `r8127` DKMS driver frequently increases packet drops and stuttering on this hardware.
+Use a **USB-C Ethernet adapter** (or USB 3.0 Gigabit adapter) as the primary network connection. This has proven far more stable for daily use including Samba, SSH, and large file transfers.
 
-**Tested symptoms resolved:** video hiccups over Samba, SSH session drops during light-to-medium load and file listing.
+## Disabling the Onboard NIC
 
-## BIOS Settings (Mandatory)
+See the full list of recommended kernel parameters here:
 
-Enter BIOS (F2 at boot) and set the following:
+**[Kernel Parameters Reference](kernel-parameters.md)**
 
-**CPU → Power Management Control**
-- PCIe Gen Speed Downgrade → **[Disabled]**
-- Package C-State Limit → **[C1]**
-- C-State Auto Demotion → **[C0]**
-- C-State Un-demotion → **[C0]**
-- Package C-State Demotion → **[Disabled]**
-- Package C-State Un-demotion → **[Disabled]**
-- Race To Halt (RTH) → **[Disabled]**
-- C-State Pre-Wake → **[Disabled]**
+The networking-related parameter is `modprobe.blacklist=r8169`.
 
-**GT/Media → Power Management Control**
-- RC6 (Render Standby) → **[Disabled]**
-- MC6 (Media Standby) → **[Disabled]**
+## Network Stack Tuning (Still Recommended)
 
-Save and exit (F10).
-
-## Step 1: Kernel Parameters
-
-Edit GRUB configuration:
-
-```bash
-sudo nano /etc/default/grub
-```
-
-Change the `GRUB_CMDLINE_LINUX_DEFAULT` line to:
-
-```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash pcie_aspm=off pcie_port_pm=off"
-```
-
-Apply:
-
-```bash
-sudo update-grub
-```
-
-## Step 2: Strong Network Stack Tuning
+Even when using a USB Ethernet adapter, the following sysctl tuning helps with Samba and large transfers:
 
 ```bash
 sudo nano /etc/sysctl.conf
 ```
 
-Add/replace with:
+Add or update:
 
 ```conf
-# Zettlab D6/D8 Ultra – aggressive stability tuning (r8169)
+# Zettlab D6/D8 Ultra – network stability tuning
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 net.core.netdev_max_backlog = 25000
 net.core.netdev_budget = 80000
-net.core.rps_sock_flow_entries = 65536
 net.ipv4.tcp_rmem = 4096 87380 16777216
 net.ipv4.tcp_wmem = 4096 65536 16777216
 net.ipv4.tcp_mem = 16777216 25165824 33554432
@@ -71,39 +37,15 @@ net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_mtu_probing = 1
 ```
 
-Apply:
+Apply changes:
 
 ```bash
 sudo sysctl -p
 ```
 
-## Step 3: r8169 Stability Script
+## SSH Keepalive Settings
 
-```bash
-sudo nano /etc/rc.local
-```
-
-Replace content with:
-
-```bash
-#!/bin/bash
-# Zettlab D6/D8 Ultra – r8169 stability fixes
-for nic in enp88s0 enp89s0; do
-    ethtool -K $nic tso off gso off gro on 2>/dev/null || true
-done
-```
-
-Make executable and enable:
-
-```bash
-sudo chmod +x /etc/rc.local
-sudo systemctl daemon-reload
-sudo systemctl start rc-local.service
-```
-
-## Step 4: SSH Keepalive Settings (Recommended)
-
-To prevent "Broken pipe" errors during Samba file listing and heavy load:
+Prevent "Broken pipe" errors during long transfers or directory listings:
 
 ```bash
 sudo nano /etc/ssh/sshd_config
@@ -117,7 +59,7 @@ ClientAliveCountMax 60
 TCPKeepAlive yes
 ```
 
-Apply:
+Then restart SSH:
 
 ```bash
 sudo systemctl restart sshd
@@ -125,15 +67,23 @@ sudo systemctl restart sshd
 
 ## Verification
 
+Check that the onboard NIC is not active:
+
 ```bash
-ethtool -i enp88s0 | grep driver   # must show r8169
-ethtool -S enp88s0 | grep -E 'error|drop|miss|queue|tx_timeout|rx_missed|rx_crc|rx_length'
+ip link show | grep -E 'enp88s0|enp89s0'
 ```
 
-During video playback or large directory listing the counters should stay at zero and playback/SSH should remain stable.
+You should not see these interfaces (or they should be down and without carrier).
+
+Check your USB Ethernet adapter:
+
+```bash
+ip -br addr show
+ethtool -i enx<your-usb-mac> | grep driver
+```
 
 ## Notes
 
-- Do **not** install the r8127 DKMS driver — it worsens symptoms on this hardware.
-- BIOS changes slightly increase idle power and fan activity.
-- All changes are reversible in BIOS.
+- The `r8127` DKMS driver and extensive BIOS C-state changes are no longer required.
+- Only the in-tree driver (`r8169`) is blacklisted.
+- USB-C Ethernet adapters have shown significantly better stability on this hardware.

@@ -24,7 +24,7 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 | Front LCD | 3.49-inch, 640×172 resolution (`eDP-1`) |
 | Audio | Intel Meteor Lake iGPU audio DSP |
 | Fans | 3× PWM fans via `zettlab_d8_fans` module (0–183 range) |
-| Networking | Dual 10GbE (Realtek RTL8127: `enp88s0` + `enp89s0`) |
+| Networking | Dual 10GbE (Realtek RTL8127: `enp88s0` + `enp89s0`) — **abandoned**, using USB-C Ethernet instead |
 | RGB/LED | USB device detected; no driver available |
 
 ---
@@ -34,7 +34,8 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 | Guide | Description |
 |-------|-------------|
 | [Ubuntu Installation](ubuntu-installation.md) | Installing Ubuntu 26.04 Server |
-| [Network Driver](networking-r8127.md) | Realtek r8127 DKMS driver setup |
+| [Kernel Parameters](kernel-parameters.md) | Centralized list of all recommended kernel parameters |
+| [Network Driver](networking-r8127.md) | Realtek r8127 status (now using USB Ethernet adapter) |
 | [Fan Control](hardware-fan-control.md) | Dynamic temperature-based fan control |
 | [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
 | [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
@@ -57,14 +58,12 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 
 ### Required Kernel Parameters
 
-| Purpose | Parameter |
-|---------|-----------|
-| Front LCD (live boot) | `video=eDP-1:d` |
-| Audio HDA driver | `snd_intel_dspcfg.dsp_driver=1` |
+All kernel parameters are now documented in one place:
+
+→ **[Kernel Parameters Reference](kernel-parameters.md)**
 
 ### DKMS Modules
 
 | Module | Purpose |
 |--------|---------|
 | `zettlab-d8-fans` | Fan control |
-| `r8127` | Network driver |

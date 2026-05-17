@@ -39,11 +39,9 @@ Download Ubuntu Server 26.04 ISO and write to USB using Rufus, balenaEtcher, or 
 1. Insert USB drive and power on
 2. Press **F12** to open boot menu; select USB drive
 3. At GRUB menu, highlight Ubuntu Server entry and press **E**
-4. At end of `linux` line, add:
-   ```
-   video=eDP-1:d
-   ```
-5. Press **Ctrl+X** or **F10** to boot
+4. Add the `video=eDP-1:d` parameter at the end of the `linux` line.
+
+See the full recommended kernel parameters in **[Kernel Parameters Reference](kernel-parameters.md)**.
 
 ### Step 3: Install Ubuntu (Btrfs recommended)
 

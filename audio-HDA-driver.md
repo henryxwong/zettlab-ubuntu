@@ -4,8 +4,8 @@
 
 ## Prerequisites
 
-- Ubuntu 26.04 Desktop installed
-- Intel iGPU stack already installed  
+- Ubuntu 26.04 Server installed
+- Intel iGPU stack already installed
 - User account with `sudo` privileges
 
 ## Installation Procedure
@@ -18,19 +18,11 @@ sudo apt update && sudo apt install -y firmware-sof-signed snapd
 
 ### Step 2: Configure Kernel Command Line
 
-Edit GRUB configuration:
+See the full list of recommended kernel parameters here:
 
-```bash
-sudo nano /etc/default/grub
-```
+**[Kernel Parameters Reference](kernel-parameters.md)**
 
-Locate the `GRUB_CMDLINE_LINUX_DEFAULT=` line and set it to:
-
-```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=eDP-1:d snd_intel_dspcfg.dsp_driver=1"
-```
-
-Save changes (Ctrl+O → Enter → Ctrl+X).
+The audio-related parameter is `snd_intel_dspcfg.dsp_driver=1`.
 
 ### Step 3: Apply Configuration and Reboot
 
@@ -58,29 +50,18 @@ Expected results:
 
 ### Audio Test
 
-```bash
-speaker-test -c 2 -t sine
-```
-
-Press Ctrl+C to stop the test tone.
-
-## Optional: Install Volume Control GUI
+Test audio output with a simple sine wave:
 
 ```bash
-sudo apt install -y pavucontrol
+speaker-test -t sine -f 1000 -l 3
 ```
 
-Launch with `pavucontrol` for per-app volume, profiles, and advanced routing.
+This should play a 1kHz tone through the default output device for a few seconds.
 
-## Troubleshooting
+You can also test with a short audio file:
 
-| Issue | Solution |
-|-------|----------|
-| Dummy Output persists after reboot | Verify kernel parameter is set correctly in `/etc/default/grub`; run `sudo update-grub` |
-| Kernel upgrade breaks audio | Run `sudo dkms autoinstall` after kernel update, then reboot |
-| Want to revert to SOF driver | Remove `snd_intel_dspcfg.dsp_driver=1` from GRUB config and reboot |
+```bash
+paplay /usr/share/sounds/sound-icons/trumpet-12.wav
+```
 
-## Notes
-
-- **Driver mechanism**: The `snd_intel_dspcfg.dsp_driver=1` kernel parameter forces use of the legacy HDA driver instead of SOF.
-- **iGPU impact**: This setting affects audio only. Video acceleration (VA-API/Quick Sync) remains unaffected.
+(If the file doesn't exist, install `sound-icons` or use any `.wav` file.)
