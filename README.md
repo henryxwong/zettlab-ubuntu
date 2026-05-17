@@ -17,14 +17,17 @@ This guide provides step-by-step instructions for installing and configuring Ubu
 
 ## Hardware Specifications
 
-| Component | Details |
-|-----------|---------|
-| CPU | Intel Core Ultra 5 125H (PL1/PL2 locked to **45 W / 93 W**) |
-| Front LCD | 3.49-inch, 640×172 resolution (`eDP-1`) |
-| Audio | Intel Meteor Lake iGPU audio DSP |
-| Fans | 3× PWM fans via `zettlab_d8_fans` module (0–183 range) |
-| Networking | Dual 10GbE (Realtek RTL8127: `enp88s0` + `enp89s0`) — **abandoned**, using USB-C Ethernet instead |
-| RGB/LED | USB device detected; no driver available |
+This table reflects the **Zettlab D6 Ultra** and **D8 Ultra** models (tested on Ubuntu 26.04).
+
+| Component     | D6 Ultra                          | D8 Ultra                          | Notes |
+|---------------|-----------------------------------|-----------------------------------|-------|
+| **CPU**       | Intel Core Ultra 5 125H           | Intel Core Ultra 5 125H           | PL1/PL2 locked to 45 W / 93 W |
+| **Bays**      | 6× 3.5" HDD bays                  | 8× 3.5" HDD bays                  | Hot-swappable |
+| **Front LCD** | 3.49-inch, 640×172 (`eDP-1`)      | 3.49-inch, 640×172 (`eDP-1`)      | Disabled during boot with `video=eDP-1:d` |
+| **Audio**     | Intel Meteor Lake iGPU DSP        | Intel Meteor Lake iGPU DSP        | Fixed with `snd_intel_dspcfg.dsp_driver=1` |
+| **Fans**      | 3× PWM fans                       | 3× PWM fans                       | Controlled via `zettlab_d8_fans` DKMS module (0–183 range) |
+| **Networking**| 2× 10GbE (Realtek RTL8127)        | 2× 10GbE (Realtek RTL8127)        | Onboard NIC unstable — using USB-C Ethernet adapter instead |
+| **RGB/LED**   | USB-controlled                    | USB-controlled                    | No driver available |
 
 ---
 
