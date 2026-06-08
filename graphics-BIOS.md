@@ -1,57 +1,67 @@
-**BIOS Graphics Configuration Guide**  
-**For Maximum Local AI Performance on Zettlab D6/D8 Ultra**
+# BIOS Graphics Configuration
 
-### Goal
-Optimize the onboard Intel Arc iGPU for local AI workloads (large language models, inference, etc.) while keeping the system stable as a NAS.
+> Optimizes the onboard Intel Arc iGPU (Meteor Lake) for local AI workloads on Zettlab D6/D8 Ultra while maintaining NAS stability.
 
-### Enter BIOS
-1. Power on the device.
-2. Press **F2** repeatedly to enter BIOS Setup.
-3. Go to the **Advanced** tab → **Graphics Configuration**.
+## Overview
 
-### Recommended Changes
+This guide configures the BIOS to prioritize the internal Arc iGPU for compute workloads (LLM inference, etc.). The key change is allocating dedicated graphics memory (`Igfx Gsm2`) without starving system RAM.
 
-Only change the following settings:
+## Prerequisites
 
-| Setting                                      | Change To       | Notes |
-|----------------------------------------------|-----------------|-------|
-| **Skip Scanning of External Gfx Card**       | **Enabled**     | Skip unnecessary PCIe scan (you are staying on iGPU) |
-| **Primary Display**                          | **IGFX**        | Force internal Arc iGPU as primary |
-| **Internal Graphics**                        | **Enabled**     | Ensure iGPU is always active |
-| **Igfx Gsm2**                                | **4GB**         | **Most important change** — gives solid dedicated VRAM without starving system RAM |
-| **GT RC1p Support**                          | **Disabled**    | Reduces potential throttling during long inference |
-| **Media RC1p Support**                       | **Disabled**    | Same reason as above |
+- Zettlab D6 Ultra or D8 Ultra
+- HDMI display and USB keyboard connected
+- Access to BIOS (device powered off or rebooting)
 
-### What to Leave Unchanged
+## Procedure
+
+### Step 1: Enter BIOS
+
+1. Power on (or reboot) the device.
+2. Repeatedly press **F2** during boot to enter BIOS Setup.
+3. Navigate to the **Advanced** tab → **Graphics Configuration**.
+
+### Step 2: Apply Recommended Settings
+
+Change only the following options:
+
+| Setting                                      | Value     | Notes |
+|----------------------------------------------|-----------|-------|
+| **Skip Scanning of External Gfx Card**       | Enabled   | Skip unnecessary PCIe scan |
+| **Primary Display**                          | IGFX      | Force internal Arc iGPU as primary |
+| **Internal Graphics**                        | Enabled   | Ensure iGPU stays active |
+| **Igfx Gsm2**                                | **4GB**   | **Most important** — dedicated VRAM for AI workloads |
+| **GT RC1p Support**                          | Disabled  | Reduces throttling during long inference |
+| **Media RC1p Support**                       | Disabled  | Same reason as above |
+
+### Step 3: Leave Unchanged
+
 - **DVMT Pre-Allocated** — Already at maximum (128M)
-- All other settings (VDD Enable, Configure GT/Media, PAVP, etc.) — Keep at current/default values
+- All other settings (VDD Enable, Configure GT/Media, PAVP, etc.) — Leave at defaults
 
-### Save and Exit
+### Step 4: Save and Exit
+
 1. Press **F10**.
-2. Select **Yes** to save changes and exit.
+2. Select **Yes** to save changes.
 3. The system will reboot.
 
-### After Reboot – Quick Verification
-Run these commands to confirm the iGPU is properly configured:
+## Verification
+
+After reboot, confirm the iGPU is active:
 
 ```bash
 # Check iGPU detection
 lspci | grep -i "VGA\|Display"
+```
 
-# Monitor iGPU in real time (recommended during AI workloads)
+For real-time monitoring during AI workloads:
+
+```bash
+sudo apt install -y intel-gpu-tools
 sudo intel_gpu_top
 ```
 
-### Summary of Changes
-| Priority | Setting                        | New Value   |
-|----------|--------------------------------|-------------|
-| Highest  | **Igfx Gsm2**                  | **4GB**     |
-| High     | Primary Display                | **IGFX**    |
-| High     | Skip Scanning of External Gfx Card | **Enabled** |
-| Medium   | GT RC1p Support                | **Disabled** |
-| Medium   | Media RC1p Support             | **Disabled** |
-| High     | Internal Graphics              | **Enabled** |
+## Notes
 
-This configuration provides a good balance between dedicated iGPU memory and available system RAM for running large models (30B–70B class) efficiently.
-
-Would you like a version of this guide formatted for your existing documentation (e.g. as a new `.md` file)?
+- The `Igfx Gsm2 = 4GB` setting provides a good balance between dedicated iGPU memory and available system RAM for 30B–70B class models.
+- This configuration is hardware-level and should be done before or alongside OS installation.
+- See the companion guide for driver installation: [Intel Arc iGPU Driver Installation](graphics-iGPU.md)
