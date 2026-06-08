@@ -39,9 +39,10 @@ This table reflects the **Zettlab D6 Ultra** and **D8 Ultra** models (tested on 
 | [Kernel Parameters](kernel-parameters.md) | Centralized list of all recommended kernel parameters |
 | [Network Driver](networking-r8127.md) | Realtek r8127 status (now using USB Ethernet adapter) |
 | [Fan Control](hardware-fan-control.md) | Dynamic temperature-based fan control |
-| [BIOS Graphics Configuration](graphics-BIOS.md) | Intel Arc iGPU BIOS settings for AI workloads |
-| [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
-| [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
+|| [BIOS Graphics Configuration](graphics-BIOS.md) | Intel Arc iGPU BIOS settings for AI workloads |
+|| [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
+|| [LLM Inference](llm-inference.md) | Vulkan & SYCL setup for local LLMs (llama.cpp) |
+|| [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
 | [Storage Pool](storage-mergerfs-snapraid.md) | mergerfs + SnapRAID configuration |
 | [Btrfs Data Replication](btrfs-data-replication.md) | Dedicated `/data` subvolume + btrbk snapshot replication to parity disk |
 | [Samba Shares](samba-shares.md) | Home + /data + mergerfs pool Samba shares |
