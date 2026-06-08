@@ -35,6 +35,7 @@ Both CPU and HDD controllers follow consistent design principles:
 - Ubuntu 26.04 Server installed
 - User account with `sudo` privileges
 - Zettlab D6/D8 Ultra hardware
+- `linux-headers-generic` package installed (recommended for reliable DKMS behavior after kernel updates)
 
 ## Kernel Module Installation
 
@@ -70,6 +71,54 @@ done
 
 sensors
 ```
+
+## After Kernel Updates
+
+When Ubuntu installs a new kernel, the `zettlab_d8_fans` DKMS module must be rebuilt for the new kernel version. This is the most common cause of the module not loading after `apt upgrade` (you may see `Exec format error`).
+
+### Recommended One-Time Setup
+
+Install the generic kernel headers package so future kernel updates can be handled more smoothly by DKMS:
+
+```bash
+sudo apt install linux-headers-generic
+```
+
+### Normal Workflow After Kernel Updates
+
+After any kernel update and reboot, run:
+
+```bash
+sudo dkms autoinstall
+sudo systemctl restart cpu-fan-curve.service hdd-fan-curve.service
+```
+
+### Full Recovery Procedure
+
+If the module fails to load after a kernel update, run this recovery sequence:
+
+```bash
+sudo dkms remove -m zettlab-d8-fans -v 0.0.1 --all
+sudo apt install linux-headers-$(uname -r) linux-headers-generic
+sudo dkms add -m zettlab-d8-fans -v 0.0.1
+sudo dkms build -m zettlab-d8-fans -v 0.0.1 -k $(uname -r)
+sudo dkms install -m zettlab-d8-fans -v 0.0.1 -k $(uname -r)
+sudo modprobe zettlab_d8_fans
+sudo systemctl restart cpu-fan-curve.service hdd-fan-curve.service
+```
+
+Then verify the module is loaded:
+
+```bash
+lsmod | grep zettlab_d8_fans
+for d in /sys/class/hwmon/hwmon*; do
+    [ -f "$d/name" ] && echo "$d: $(cat "$d/name")"
+done
+```
+
+### Why This Happens
+
+The `Exec format error` occurs when the compiled kernel module was built against a different kernel version than the one currently running. The steps above force a clean rebuild against the exact running kernel.
 
 ## CPU Fan Control
 
@@ -235,3 +284,4 @@ echo 120 | sudo tee "$ZETTLAB/pwm3"
 - All scripts include hard-coded minimum safe PWM and emergency full-speed overrides
 - If any temperature sensor fails, the system forces full speed (183 PWM)
 - Timer-based hysteresis prevents frequent speed adjustments after any upward change
+```
