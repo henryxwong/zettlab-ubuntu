@@ -27,7 +27,7 @@ This table reflects the **Zettlab D6 Ultra** and **D8 Ultra** models (tested on 
 | **Audio**     | Intel Meteor Lake iGPU DSP        | Intel Meteor Lake iGPU DSP        | Fixed with `snd_intel_dspcfg.dsp_driver=1` |
 | **Fans**      | 3× PWM fans                       | 3× PWM fans                       | Controlled via `zettlab_d8_fans` DKMS module (0–183 range) |
 | **Networking**| 2× 10GbE (Realtek RTL8127)        | 2× 10GbE (Realtek RTL8127)        | Onboard NIC unstable — using USB-C Ethernet adapter instead |
-| **RGB/LED**   | USB-controlled                    | USB-controlled                    | No driver available |
+| **RGB/LED**   | USB-controlled                    | USB-controlled                    | See [RGB/LED Control](rgb-led-control.md) — protocol via `/dev/ttyACM0` |
 
 ---
 
@@ -39,12 +39,13 @@ This table reflects the **Zettlab D6 Ultra** and **D8 Ultra** models (tested on 
 | [Kernel Parameters](kernel-parameters.md) | Centralized list of all recommended kernel parameters |
 | [Network Driver](networking-r8127.md) | Realtek r8127 status (now using USB Ethernet adapter) |
 | [Fan Control](hardware-fan-control.md) | Dynamic temperature-based fan control |
-|| [BIOS Graphics Configuration](graphics-BIOS.md) | Intel Arc iGPU BIOS settings for AI workloads |
-|| [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
-|| [LLM Inference](llm-inference.md) | Vulkan & SYCL setup for local LLMs (llama.cpp) |
-|| [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
+| [BIOS Graphics Configuration](graphics-BIOS.md) | Intel Arc iGPU BIOS settings for AI workloads |
+| [Graphics Driver](graphics-iGPU.md) | Intel Arc iGPU compute/media stack |
+| [LLM Inference](llm-inference.md) | Vulkan & SYCL setup for local LLMs (llama.cpp) |
+| [Audio Configuration](audio-HDA-driver.md) | Fixing "Dummy Output" issue |
 | [Storage Pool](storage-mergerfs-snapraid.md) | mergerfs + SnapRAID configuration |
 | [Btrfs Data Replication](btrfs-data-replication.md) | Dedicated `/data` subvolume + btrbk snapshot replication to parity disk |
+| [RGB/LED Control](rgb-led-control.md) | USB RGB controller protocol (`/dev/ttyACM0`, VID:0x5759 PID:0x4358) |
 | [Samba Shares](samba-shares.md) | Home + /data + mergerfs pool Samba shares |
 
 ---

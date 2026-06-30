@@ -86,23 +86,12 @@ sudo apt install linux-headers-generic
 
 ### Normal Workflow After Kernel Updates
 
-After any kernel update and reboot, run:
-
-```bash
-sudo dkms autoinstall
-sudo systemctl restart cpu-fan-curve.service hdd-fan-curve.service
-```
-
-### Full Recovery Procedure
-
-If the module fails to load after a kernel update, run this recovery sequence:
+After any kernel update, reboot into the new kernel first, then run:
 
 ```bash
 sudo dkms remove -m zettlab-d8-fans -v 0.0.1 --all
-sudo apt install linux-headers-$(uname -r) linux-headers-generic
-sudo dkms add -m zettlab-d8-fans -v 0.0.1
-sudo dkms build -m zettlab-d8-fans -v 0.0.1 -k $(uname -r)
-sudo dkms install -m zettlab-d8-fans -v 0.0.1 -k $(uname -r)
+sudo dkms build -m zettlab-d8-fans -v 0.0.1
+sudo dkms install -m zettlab-d8-fans -v 0.0.1
 sudo modprobe zettlab_d8_fans
 sudo systemctl restart cpu-fan-curve.service hdd-fan-curve.service
 ```
@@ -118,7 +107,23 @@ done
 
 ### Why This Happens
 
-The `Exec format error` occurs when the compiled kernel module was built against a different kernel version than the one currently running. The steps above force a clean rebuild against the exact running kernel.
+The `Exec format error` occurs when the compiled kernel module was built against a different kernel version than the one currently running. DKMS has a quirk: when building for a non-running kernel, it may use the wrong headers (the running kernel's instead of the target's), producing a module with wrong vermagic. Always rebuild after rebooting into the new kernel.
+
+### If You Must Fix Before Rebooting
+
+If `apt upgrade` leaves packages broken and you can't reboot yet, the old kernel headers may be incomplete (missing `autoconf.h`). Fix with:
+
+```bash
+sudo apt install -y flex bison libelf-dev
+cd /usr/src/linux-headers-<old-version>  # e.g., 7.0.0-22-generic
+sudo make syncconfig
+cd ~
+sudo dkms build -m zettlab-d8-fans -v 0.0.1
+sudo dkms install -m zettlab-d8-fans -v 0.0.1
+sudo apt --fix-broken install
+```
+
+This generates the missing files in the old headers so DKMS can build. After this, reboot into the new kernel and rebuild again to ensure the module is built against the correct kernel.
 
 ## CPU Fan Control
 
