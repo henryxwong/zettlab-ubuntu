@@ -152,3 +152,61 @@ If color/speed args are omitted, defaults to: solid red (`255,0,0`), speed `5`.
 ### Source Code
 
 See `rgb_control.py` for the full implementation.
+
+## Demo: CPU Temperature -> RGB LED (`rgb_temp.py`)
+
+A demo script that maps CPU temperature to RGB color and brightness, updating the LED automatically.
+
+### Features
+
+- **Live temp source**: Reads CPU package temperature from `/sys/class/hwmon` (unsmoothed, real-time)
+- **Range calculation**: Hybrid 24h + 30d Netdata history — `min = min(24h_min, 30d_min)`, `max = max(24h_max, 30d_max)` for accurate min/max range
+- **Color gradient**: Blue (cool) → Red (hot), no green channel
+- **Brightness scaling**: 2.5% (cool) → 25% (hot), proportional to temperature within range
+- **Smart updates**: Only sends to LED when color actually changes (avoids redundant writes)
+- **Range refresh**: Min/max range updates every 1 hour instead of every poll
+- **No external dependencies**: stdlib only (`argparse`, `json`, `time`, `os`, `subprocess`)
+
+### Usage
+
+```bash
+# Run once and exit (for testing)
+python3 rgb_temp.py --once
+
+# Run continuously in the background
+python3 rgb_temp.py &
+```
+
+### Configuration (hardcoded)
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Temp interval | 20s | How often to read sensor |
+| Range refresh | 1h | How often to recalc min/max from Netdata |
+| Brightness max | 25% | Hot temp brightness, cool = 2.5% |
+| LED mode | 6 (LIGHT) | Solid color |
+| Animation speed | 5 | Passed to rgb_control.py |
+
+### Example Output
+
+```
+rgb_temp: CPU temp -> RGB LED controller
+  Temp interval: 20s, Range refresh: every 60min
+  Mode: solid (6), Color: blue(cool) -> red(hot)
+  Range: hybrid 24h+30d Netdata (min of mins, max of maxs)
+  Brightness: 2.5% (cool) -> 25% (hot)
+
+[14:30:00] [OK] temp=62.0C range=[57.0, 91.5]C t=0.14 color=(2,0,12)
+[14:30:20] [OK] temp=78.0C range=[57.0, 91.5]C t=0.61 color=(12,0,8)
+```
+
+### Color Math
+
+```
+t = (temp - min_temp) / (max_temp - min_temp)  # normalized 0-1
+brightness = (0.1 + t * 0.9) * 0.25            # 2.5% to 25%
+r = int(t * 255 * brightness)
+b = int((1 - t) * 255 * brightness)
+```
+
+Cool temp → dim blue, hot temp → brighter red. The LED is always visible but subtle.
