@@ -158,6 +158,7 @@ def main():
 
     last_range_update = time.time() - range_update_interval  # force initial read
     prev_color = None
+    temp_samples: list[float] = []
 
     while True:
         now = time.time()
@@ -176,6 +177,12 @@ def main():
             print(f"[{time.strftime('%H:%M:%S')}] hwmon unavailable, skipping", file=sys.stderr)
             time.sleep(interval)
             continue
+
+        # Rolling window of last 3 samples (moving average)
+        temp_samples.append(current)
+        if len(temp_samples) > 3:
+            temp_samples.pop(0)
+        current = sum(temp_samples) / len(temp_samples)
 
         r, g, b = compute_color(current, min_temp, max_temp)
         t = (current - min_temp) / (max_temp - min_temp) if max_temp != min_temp else 0
