@@ -9,7 +9,6 @@ This guide enables:
 - Hardware video decoding/encoding (VA-API / Quick Sync)
 - OpenCL and oneAPI Level Zero compute runtime
 - Full access to `/dev/dri/renderD*` device nodes
-- Proper support for the front LCD (`eDP-1`)
 
 > **Note**: Some advanced packages (intel-gsc, intel-metrics-discovery, libmfx-gen1) are not yet available in Ubuntu 26.04 official repositories.
 

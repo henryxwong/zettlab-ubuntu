@@ -74,6 +74,6 @@ After installation, create a dedicated `/data` subvolume and set up automatic sn
 | Component   | Status                                      |
 |-------------|---------------------------------------------|
 | Fans        | Fully supported via `zettlab_d8_fans` DKMS module |
-| Front LCD   | Connected as `eDP-1`; disabled during live boot with kernel parameter |
+| Front LCD   | Connected as `eDP-1`; disabled during live boot with kernel parameter. Enabling causes HDMI resolution to be forced to 640x172 — issue unresolved. |
 | Networking  | Realtek RTL8127 — use USB-C Ethernet adapter (onboard NIC unstable) |
 | CPU         | Intel Core Ultra 5 125H; PL1/PL2 locked at 45 W / 93 W |

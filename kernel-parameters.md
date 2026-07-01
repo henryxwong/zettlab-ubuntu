@@ -40,6 +40,7 @@ sudo reboot
 - The onboard Realtek RTL8127 NIC has been abandoned due to instability. A USB-C Ethernet adapter is used instead.
 - Only the in-tree driver (`r8169`) is blacklisted. The out-of-tree `r8127` driver is not installed.
 - `pcie_aspm=off` and `pcie_port_pm=off` have been removed (no longer needed after abandoning the onboard NIC).
+- The front LCD (`eDP-1`) is disabled via `video=eDP-1:d` because enabling it forces HDMI to match its 640x172 resolution. This issue is unresolved — see [Installation Guide](ubuntu-installation.md).
 
 ## How to View Current Parameters
 
