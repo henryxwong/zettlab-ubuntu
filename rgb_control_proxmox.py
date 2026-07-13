@@ -5,7 +5,7 @@ import sys
 import os
 import termios
 
-DEVICE = "/dev/ttyACM0"
+DEVICE = "/dev/ttyACM1"
 BAUD = 115200
 
 # CRC-8/SAE J1850 lookup table
@@ -67,8 +67,11 @@ def open_serial():
     attrs[1] = 0   # oflag
     attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL  # cflag
     attrs[3] = 0   # lflag
-    attrs[4] = BAUD  # ispeed
-    attrs[5] = BAUD  # ospeed
+    
+    # FIX: Use termios constants for baud rate, not raw integers
+    attrs[4] = termios.B115200  # ispeed
+    attrs[5] = termios.B115200  # ospeed
+    
     cc = list(attrs[6])
     cc[termios.VMIN] = 0
     cc[termios.VTIME] = 0
@@ -76,7 +79,6 @@ def open_serial():
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
     termios.tcflush(fd, termios.TCIFLUSH)
     return fd
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 rgb_control.py <mode> [start_r start_g start_b end_r end_g end_b speed]")
