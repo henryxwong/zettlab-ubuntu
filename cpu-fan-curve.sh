@@ -49,6 +49,12 @@ main_loop() {
     local temp_c smoothed_temp error pwm last_temp=0 last_pwm last_change_time=0
     last_pwm=$MIN_SAFE_PWM
 
+    # Hardware PWM may still be at a previous controller's value (often 183).
+    # last_pwm starts at MIN_SAFE_PWM, so without this write the loop sees
+    # "no change" at idle and never drops the fans.
+    apply_pwm "$last_pwm"
+    last_change_time=$(date +%s)
+
     while true; do
         if ! temp_c=$(read_temp_c); then
             # SAFETY: Force full speed on any sensor read failure

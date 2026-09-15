@@ -273,7 +273,7 @@ sudo systemctl enable --now cpu-fan-curve.service
 | `HOLD_TIME_AFTER_UP_SECS`| 120     | Minimum seconds to hold PWM after upward change  |
 | `SLEEP_SECS`             | 20      | Interval between temperature readings            |
 
-The script automatically detects all SATA drives (`/dev/sd[a-h]`) and monitors the maximum temperature.
+The script automatically detects all SATA drives (`/dev/sd[a-h]`) and monitors the maximum temperature. If none are present, it holds the disk fans at `MIN_SAFE_PWM` instead of treating that as a sensor failure (which would force full speed).
 
 ### Installation
 

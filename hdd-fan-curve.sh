@@ -37,6 +37,7 @@ for dev in /dev/sd[a-h]; do
 done
 
 PWM_OUTPUTS=("$ZETTLAB_HWMON/pwm1" "$ZETTLAB_HWMON/pwm2")
+PWM_ENABLES=("$ZETTLAB_HWMON/pwm1_enable" "$ZETTLAB_HWMON/pwm2_enable")
 
 read_drive_temp() {
     local drive=$1 temp
@@ -60,15 +61,32 @@ read_max_hdd_temp() {
 }
 
 apply_pwm() {
-    local pwm=$1 output
-    for output in "${PWM_OUTPUTS[@]}"; do
-        printf '%s\n' "$pwm" >"$output"
+    local pwm=$1
+    local i
+    for i in "${!PWM_OUTPUTS[@]}"; do
+        printf '1\n' >"${PWM_ENABLES[$i]}"
+        printf '%s\n' "$pwm" >"${PWM_OUTPUTS[$i]}"
     done
 }
 
 main_loop() {
     local temp_c smoothed_temp error pwm last_temp=0 last_pwm last_change_time=0
     last_pwm=$MIN_SAFE_PWM
+
+    # Hardware PWM may still be at a previous controller's value (often 183).
+    # last_pwm starts at MIN_SAFE_PWM, so without this write the loop sees
+    # "no change" at idle and never drops the fans.
+    apply_pwm "$last_pwm"
+    last_change_time=$(date +%s)
+
+    # No SATA drives: do not treat as a sensor failure (that would pin fans at 183).
+    # Hold minimum PWM and stay running so systemd Restart=always does not loop.
+    if (( ${#DRIVES[@]} == 0 )); then
+        echo "WARNING: No SATA drives detected. Holding disk fans at PWM=$MIN_SAFE_PWM." >&2
+        while true; do
+            sleep "$SLEEP_SECS"
+        done
+    fi
 
     while true; do
         if ! temp_c=$(read_max_hdd_temp); then
