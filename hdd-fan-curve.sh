@@ -62,9 +62,14 @@ read_max_hdd_temp() {
 
 apply_pwm() {
     local pwm=$1
-    local i
+    local i enable current_enable
     for i in "${!PWM_OUTPUTS[@]}"; do
-        printf '1\n' >"${PWM_ENABLES[$i]}"
+        enable=${PWM_ENABLES[$i]}
+        # pwm1/pwm2 enable nodes are read-only on this driver once already manual.
+        current_enable=$(cat "$enable" 2>/dev/null || echo '?')
+        if [[ "$current_enable" != "1" ]]; then
+            printf '1\n' >"$enable" 2>/dev/null || true
+        fi
         printf '%s\n' "$pwm" >"${PWM_OUTPUTS[$i]}"
     done
 }
