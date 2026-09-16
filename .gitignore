@@ -3,3 +3,4 @@
 SETUP-LOG.md
 __pycache__/
 *.pyc
+.idea/
