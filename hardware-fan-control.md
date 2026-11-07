@@ -72,7 +72,32 @@ cd zettlab-d8-fans
 
 sudo mkdir -p /usr/src/zettlab-d8-fans-0.0.1
 sudo cp -r * /usr/src/zettlab-d8-fans-0.0.1/
+```
 
+Upstream's Makefile pins the build to the **running** kernel, and `dkms.conf` runs
+`make` itself, so DKMS's `-k <target>` never takes effect. Write the corrected Makefile
+over the copy before the first build — otherwise the first kernel upgrade after this
+install boots without fan control (see [Why This Happens](#why-this-happens)):
+
+```bash
+sudo tee /usr/src/zettlab-d8-fans-0.0.1/Makefile >/dev/null <<'EOF'
+obj-m += zettlab_d8_fans.o
+
+# DKMS exports KERNELRELEASE for the target kernel; uname -r is only the
+# fallback for a hand-run build in the running tree.
+KREL := $(if $(KERNELRELEASE),$(KERNELRELEASE),$(shell uname -r))
+KDIR := /lib/modules/$(KREL)/build
+PWD  := $(shell pwd)
+
+all:
+	make -C $(KDIR) M=$(PWD) modules
+
+clean:
+	make -C $(KDIR) M=$(PWD) clean
+EOF
+```
+
+```bash
 sudo dkms add -m zettlab-d8-fans -v 0.0.1
 sudo dkms build -m zettlab-d8-fans -v 0.0.1
 sudo dkms install -m zettlab-d8-fans -v 0.0.1
