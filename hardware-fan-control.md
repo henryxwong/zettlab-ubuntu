@@ -164,15 +164,17 @@ sudo apt install linux-headers-generic
 
 ### Manual Rebuild (if DKMS didn't auto-rebuild)
 
-Reboot into the new kernel first, then:
+No reboot required — build for the new kernel by name:
 
 ```bash
-sudo dkms remove -m zettlab-d8-fans -v 0.0.1 --all
-sudo dkms build -m zettlab-d8-fans -v 0.0.1
-sudo dkms install -m zettlab-d8-fans -v 0.0.1
-sudo modprobe zettlab_d8_fans
-sudo systemctl restart cpu-fan-curve.service hdd-fan-curve.service
+NEWVER=$(ls /lib/modules | sort -V | tail -1)   # e.g. 7.0.0-43-generic
+sudo dkms remove  -m zettlab-d8-fans -v 0.0.1 --all
+sudo dkms build   -m zettlab-d8-fans -v 0.0.1 -k "$NEWVER" --force
+sudo dkms install -m zettlab-d8-fans -v 0.0.1 -k "$NEWVER" --force
 ```
+
+`modprobe` and the service restarts only apply once you are actually running that
+kernel — after a reboot they happen on their own via `modules-load.d`.
 
 Verify the module is loaded:
 
@@ -183,9 +185,47 @@ for d in /sys/class/hwmon/hwmon*; do
 done
 ```
 
+If you built for a kernel you have not booted into yet, read the vermagic straight out
+of the built object — it must name the target kernel, not the running one:
+
+```bash
+zstd -dc /lib/modules/"$NEWVER"/updates/dkms/zettlab_d8_fans.ko.zst > /tmp/f.ko
+modinfo /tmp/f.ko | grep -E '^(vermagic|signer)'
+```
+
 ### Why This Happens
 
-The `Exec format error` occurs when the compiled kernel module was built against a different kernel version than the one currently running. DKMS has a quirk: when building for a non-running kernel, it may use the wrong headers (the running kernel's instead of the target's), producing a module with wrong vermagic. Always rebuild after rebooting into the new kernel.
+`Exec format error` (and, on some builds, `disagrees about version of symbol`) means the
+compiled module was built against a different kernel than the one booting. The cause is
+not DKMS — it is the module's own Makefile: upstream pins the kernel tree to the
+**running** kernel.
+
+```make
+KDIR := /lib/modules/$(shell uname -r)/build
+```
+
+`dkms.conf` sets `MAKE[0]="make"`, so DKMS runs that Makefile verbatim and the `-k
+<target>` it was given never reaches the build. Whatever kernel is running at build time
+is what the module is compiled for, and `dkms status` still prints `installed` — so a
+build for a kernel you have not booted yet looks perfectly healthy and then fails at boot.
+
+Fix it once in `/usr/src/zettlab-d8-fans-0.0.1/Makefile` and DKMS can then build for any
+installed kernel, before rebooting:
+
+```make
+KREL := $(if $(KERNELRELEASE),$(KERNELRELEASE),$(shell uname -r))
+KDIR := /lib/modules/$(KREL)/build
+```
+
+DKMS exports `KERNELRELEASE` for the target kernel; `uname -r` stays only as the fallback
+for a hand-run `make` in the running tree. After editing, re-run the build/install above
+with `-k "$NEWVER" --force` and check the vermagic.
+
+For contrast, the `zettlab_gpio_keys` module builds for the not-yet-booted kernel without
+any fix: its Makefile uses `KDIR ?=` and its `dkms.conf` has no `MAKE[0]` line, so DKMS's
+own `make -C /lib/modules/<target>/build` invocation wins. The two modules failing and
+succeeding differently on the same kernel bump is the tell that a module's Makefile, not
+DKMS, is at fault.
 
 ### If You Must Fix Before Rebooting
 
@@ -201,7 +241,7 @@ sudo dkms install -m zettlab-d8-fans -v 0.0.1
 sudo apt --fix-broken install
 ```
 
-This generates the missing files in the old headers so DKMS can build. After this, reboot into the new kernel and rebuild again to ensure the module is built against the correct kernel.
+This generates the missing files in the old headers so DKMS can build. Reboot into the new kernel afterwards; with the Makefile fix above a further rebuild is not needed, without it the module must be rebuilt once you are running the new kernel.
 
 ## CPU Fan Control
 
